@@ -1,0 +1,48 @@
+{
+  "name": "esm-check-updates",
+  "private": false,
+  "version": "0.0.1",
+  "description": "Check for updates to your ESM packages.",
+  "license": "MIT",
+  "author": "Ryan Roemer <ryan.roemer@nearform.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nearform/esm-check-updates.git"
+  },
+  "homepage": "https://github.com/nearform/esm-check-updates#readme",
+  "bugs": {
+    "url": "https://github.com/nearform/esm-check-updates/issues"
+  },
+  "keywords": [
+    "esm",
+    "updates",
+    "check",
+    "packages"
+  ],
+  "type": "module",
+  "main": "src/index.js",
+  "files": [
+    "src",
+    "bin"
+  ],
+  "scripts": {
+    "check": "npm run lint && npm run check:format && npm run test",
+    "check:format": "prettier --check .",
+    "check:lint": "eslint .",
+    "format": "prettier --write . && eslint --cache --fix .",
+    "lint": "eslint .",
+    "test": "node --test 'test/*.test.js'",
+    "test:only": "node --test --test-only 'test/*.test.js'",
+    "dep:check": "npx npm-check-updates"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
