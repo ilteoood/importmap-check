@@ -21,6 +21,9 @@
   ],
   "type": "module",
   "main": "src/index.js",
+  "bin": {
+    "esm-check-updates": "bin/esm-check-updates.js"
+  },
   "files": [
     "src",
     "bin"
