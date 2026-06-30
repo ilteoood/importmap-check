@@ -13,6 +13,11 @@ The system SHALL support `esm.sh` and `jsdelivr` CDN URL families in v1.
 - **WHEN** an import entry value uses a supported `esm.sh` package URL format
 - **THEN** the system attempts to extract the package identity and pinned version
 
+#### Scenario: esm.sh dependency query pins are encountered
+- **WHEN** an `esm.sh` URL includes a `?deps=` query string with one or more package version pins
+- **THEN** the system treats each parseable pinned dependency in that query string as in scope for package and version validation
+- **AND** the system reports any dependency query entries in that string that are not parseable as pinned package versions
+
 #### Scenario: jsdelivr mapping is encountered
 - **WHEN** an import entry value uses a supported `jsdelivr` package URL format
 - **THEN** the system attempts to extract the package identity and pinned version
@@ -39,6 +44,10 @@ The system SHALL validate that supported CDN-backed mappings use a parseable pin
 #### Scenario: pinned version is present and parseable
 - **WHEN** an entry contains an explicit package version in a supported CDN URL format
 - **THEN** the system uses that version as the current version for update analysis
+
+#### Scenario: pinned version is present in an esm.sh dependency query
+- **WHEN** an `esm.sh` URL expresses package versions through a parseable `?deps=` query string
+- **THEN** the system uses those pinned dependency versions as current versions for update analysis
 
 #### Scenario: pinned version is absent or not parseable
 - **WHEN** an entry does not provide a parseable explicit package version

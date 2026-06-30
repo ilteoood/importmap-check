@@ -64,12 +64,13 @@ The system SHALL report mappings that appear in scope but cannot be fully parsed
 
 ## Non-Goals
 
-- Import map `scopes`
 - External HTML import map references
+- Multiple inline import maps within one HTML file
 - Full HTML parsing beyond supported inline import map extraction
 - Exhaustive support for every import map feature
 
 ## Open Questions
 
 - Whether later versions should accept external import map references from HTML
+- Whether later versions should support multiple inline import maps within a single HTML file
 - Whether later versions should support `scopes` with distinct reporting behavior
