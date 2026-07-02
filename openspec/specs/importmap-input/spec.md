@@ -75,6 +75,13 @@ The system SHALL report mappings that appear in scope but cannot be fully parsed
 - **THEN** the system reports the entry as unparseable or non-versioned
 - **AND** the system does not silently treat the entry as up-to-date
 
+### Requirement: Import Map Reference Comments
+The implementation SHALL include code comments with authoritative document links where available for import map behaviors derived from external specifications or browser-facing format rules.
+
+#### Scenario: Import map behavior is implemented from documented external rules
+- **WHEN** the implementation adds or maintains logic for import map parsing, validation, or supported structure handling based on an external standard or authoritative reference
+- **THEN** the relevant code includes a concise comment with a link to that authoritative document when such a document exists
+
 ## Non-Goals
 
 - External HTML import map references

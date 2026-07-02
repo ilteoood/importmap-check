@@ -93,6 +93,13 @@ The system SHALL determine whether a newer package version is available for supp
 - **THEN** the system reports the successful update findings it was able to determine
 - **AND** the system reports the lookup failures separately
 
+### Requirement: CDN Reference Comments
+The implementation SHALL include code comments with authoritative document links where available for supported CDN URL shapes, query semantics, and package resolution nuances.
+
+#### Scenario: CDN-specific parsing behavior is implemented from documented service rules
+- **WHEN** the implementation adds or maintains logic for supported CDN-specific URL parsing or query handling based on published service documentation
+- **THEN** the relevant code includes a concise comment with a link to that authoritative document when such a document exists
+
 ## Non-Goals
 
 - Split target versions for related entries of the same package
