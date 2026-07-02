@@ -13,6 +13,19 @@ The system SHALL present analysis results in human-readable terminal output.
 - **WHEN** the system finishes analyzing a target file
 - **THEN** the system prints a terminal report summarizing update findings and issues
 
+### Requirement: Package-Centric Reporting
+The system SHALL report update findings by package identity rather than by raw source entry.
+
+#### Scenario: one package appears in multiple source occurrences
+- **WHEN** the same package is discovered in multiple import entries or parseable `esm.sh ?deps=` query pins
+- **THEN** the system reports one package-level result for that package
+- **AND** the report preserves or summarizes the source occurrences that contributed to that package result
+
+#### Scenario: one package has skewed current versions across source occurrences
+- **WHEN** source occurrences for the same package use different current pinned versions
+- **THEN** the system reports a single package-level candidate target version when possible
+- **AND** the report makes the current-version skew visible to the user as an explicit current version list such as `18.2.0, 18.3.1`
+
 ### Requirement: Colored Update Presentation
 The system SHALL use terminal color to distinguish update severity in supported terminals.
 
@@ -50,6 +63,14 @@ The system SHALL separately report entries and conditions that could not be vali
 - **WHEN** latest-version resolution fails for one or more parseable packages
 - **THEN** the system reports those failures separately from successful update findings
 
+#### Scenario: scopes are encountered
+- **WHEN** one or more import maps contain `scopes`
+- **THEN** the system reports that `scopes` are not yet supported
+
+#### Scenario: some package lookups fail while others succeed
+- **WHEN** successful update findings and lookup failures both occur in the same run
+- **THEN** the system reports both the successful results and the failures in the same terminal report
+
 ### Requirement: Non-Destructive Guidance
 The system SHALL not imply that target files were changed in check-only mode.
 
@@ -57,6 +78,14 @@ The system SHALL not imply that target files were changed in check-only mode.
 - **WHEN** the system reports available updates
 - **THEN** the output describes the result as informational analysis
 - **AND** the output does not claim that the target file was updated
+
+### Requirement: Partial Lookup Success Semantics
+The system SHALL treat partial package lookup success as a successful check in v1.
+
+#### Scenario: some package lookups fail
+- **WHEN** one or more package lookups fail but the overall check completes and other package results were produced
+- **THEN** the system returns a successful check result
+- **AND** the output reports the lookup failures clearly
 
 ## Non-Goals
 

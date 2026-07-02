@@ -62,10 +62,16 @@ The system SHALL conflate related entries for the same package to a single candi
 - **THEN** the system treats them as one package update candidate
 - **AND** the system reports a single candidate target version for that package
 
+#### Scenario: direct imports and esm.sh dependency query pins map to one package
+- **WHEN** the same package is discovered through direct import entries, package subpath entries, or parseable `esm.sh ?deps=` query pins
+- **THEN** the system merges those occurrences into one package update candidate
+- **AND** the system retains the source occurrences needed for reporting
+
 #### Scenario: related entries are inconsistent
 - **WHEN** entries believed to represent the same package do not agree on their current pinned version
 - **THEN** the system reports the inconsistency
 - **AND** the system does not silently normalize conflicting current versions
+- **AND** the system still determines a single candidate target version for that package when possible
 
 ### Requirement: Latest Version Resolution
 The system SHALL determine whether a newer package version is available for supported, parseable package candidates.
@@ -81,6 +87,11 @@ The system SHALL determine whether a newer package version is available for supp
 #### Scenario: latest version lookup fails
 - **WHEN** the system cannot resolve latest version information for a package candidate
 - **THEN** the system reports the lookup failure
+
+#### Scenario: some package lookups fail while others succeed
+- **WHEN** the system resolves update information for some package candidates but fails to resolve others
+- **THEN** the system reports the successful update findings it was able to determine
+- **AND** the system reports the lookup failures separately
 
 ## Non-Goals
 

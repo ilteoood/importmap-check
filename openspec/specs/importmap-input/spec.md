@@ -27,6 +27,11 @@ The system SHALL support HTML files that contain an inline `<script type="import
 - **THEN** the system extracts the import map JSON from that element
 - **AND** the system inspects supported mappings for update analysis
 
+#### Scenario: HTML file contains multiple supported inline import maps
+- **WHEN** the target HTML file contains two or more inline import map script elements
+- **THEN** the system extracts each supported inline import map
+- **AND** the system inspects supported mappings across all extracted inline import maps for update analysis
+
 #### Scenario: HTML file does not contain a supported inline import map
 - **WHEN** the target HTML file does not contain a supported inline import map script element
 - **THEN** the system reports that no supported import map was found
@@ -42,6 +47,14 @@ The system SHALL inspect entries in the top-level `imports` section in v1.
 #### Scenario: Imports section is absent
 - **WHEN** the import map does not contain an `imports` object
 - **THEN** the system reports that no supported import entries were found
+
+### Requirement: Scopes Handling
+The system SHALL treat import map `scopes` as recognized but not yet supported in v1.
+
+#### Scenario: Scopes are present in an import map
+- **WHEN** the import map contains a top-level `scopes` object
+- **THEN** the system warns that `scopes` are not yet supported
+- **AND** the system continues processing supported `imports` entries
 
 ### Requirement: CDN-Backed Mapping Detection
 The system SHALL treat CDN-backed import entries as in scope for update analysis when their URL format is supported.
@@ -65,12 +78,10 @@ The system SHALL report mappings that appear in scope but cannot be fully parsed
 ## Non-Goals
 
 - External HTML import map references
-- Multiple inline import maps within one HTML file
 - Full HTML parsing beyond supported inline import map extraction
 - Exhaustive support for every import map feature
 
 ## Open Questions
 
 - Whether later versions should accept external import map references from HTML
-- Whether later versions should support multiple inline import maps within a single HTML file
 - Whether later versions should support `scopes` with distinct reporting behavior

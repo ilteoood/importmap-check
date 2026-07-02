@@ -74,6 +74,15 @@ The system SHALL reject `--update` and `-u` in v1 as unsupported options.
 - **AND** the system writes the error to `stderr`
 - **AND** the system returns a non-zero exit code
 
+### Requirement: Unknown Flag Handling
+The system SHALL reject unsupported CLI flags in v1.
+
+#### Scenario: Unknown flag is provided
+- **WHEN** the user runs the command with a flag that is not supported in v1
+- **THEN** the system rejects the invocation as invalid
+- **AND** the system writes the error to `stderr`
+- **AND** the system returns a non-zero exit code
+
 ### Requirement: Target Validation
 The system SHALL validate the supplied target path before deeper import map analysis begins.
 
