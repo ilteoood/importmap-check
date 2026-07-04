@@ -5,6 +5,8 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 
+const repoRoot = path.resolve(import.meta.dirname, "..");
+
 const fixtures = [];
 
 const createFixtureDir = async () => {
@@ -28,7 +30,7 @@ const runCli = async (args) => {
       process.execPath,
       ["bin/esm-check-updates.js", ...args],
       {
-        cwd: "/Users/rye/scm/nf/esm-check-updates",
+        cwd: repoRoot,
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
