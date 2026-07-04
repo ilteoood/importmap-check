@@ -132,6 +132,14 @@ The system SHALL use standard output streams consistently for normal results and
 - **WHEN** the system cannot complete due to a fatal runtime or processing error
 - **THEN** the system writes the error to `stderr`
 
+### Requirement: CLI And Functional Code Separation
+The system SHALL keep command-line orchestration in the published bin entrypoint and reserve `src/` for ESM/import map functional code.
+
+#### Scenario: bootstrap CLI behavior is implemented
+- **WHEN** argument parsing, help/version handling, exit code management, or target-path preflight validation is added or changed
+- **THEN** that behavior is implemented in `bin/esm-check-updates.js`
+- **AND** `src/` is not used as the home for command-line orchestration
+
 ### Requirement: Exit Code Semantics
 The system SHALL treat update findings as a successful execution result.
 
