@@ -21,6 +21,11 @@ The system SHALL report update findings by package identity rather than by raw s
 - **THEN** the system reports one package-level result for that package
 - **AND** the report preserves or summarizes the source occurrences that contributed to that package result
 
+#### Scenario: one package appears across multiple import maps in one HTML file
+- **WHEN** the same package is discovered through entries originating from multiple extracted inline import maps in the same HTML target
+- **THEN** the system still reports one package-level result for that package
+- **AND** the report preserves or summarizes the import-map provenance that contributed to that result
+
 #### Scenario: one package has skewed current versions across source occurrences
 - **WHEN** source occurrences for the same package use different current pinned versions
 - **THEN** the system reports a single package-level candidate target version when possible
@@ -54,6 +59,7 @@ The system SHALL separately report entries and conditions that could not be vali
 #### Scenario: unparseable or non-versioned mappings are encountered
 - **WHEN** one or more in-scope entries cannot be parsed for package and version validation
 - **THEN** the system reports those entries separately from successful update findings
+- **AND** the overall check may still succeed
 
 #### Scenario: unsupported CDN mappings are encountered
 - **WHEN** one or more CDN-backed entries fall outside the supported CDN set
@@ -66,6 +72,14 @@ The system SHALL separately report entries and conditions that could not be vali
 #### Scenario: scopes are encountered
 - **WHEN** one or more import maps contain `scopes`
 - **THEN** the system reports that `scopes` are not yet supported
+
+#### Scenario: one package has destination skew across source occurrences
+- **WHEN** source occurrences for the same package resolve through different supported CDN destination values or CDN families
+- **THEN** the system reports that destination skew as a distinct warning separate from ordinary update findings
+
+#### Scenario: integrity metadata is implicated by a future URL change
+- **WHEN** an analyzed mapping is associated with top-level import map `integrity` metadata that would require reconsideration if an update rewrote a destination URL
+- **THEN** the system reports or records a note suitable for future update-mode handling
 
 #### Scenario: some package lookups fail while others succeed
 - **WHEN** successful update findings and lookup failures both occur in the same run

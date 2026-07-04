@@ -38,6 +38,15 @@ The system SHALL extract a package identity from supported CDN-backed mappings w
 - **WHEN** an entry maps a package subpath such as `react/jsx-runtime` to a supported CDN URL with a parseable package and version
 - **THEN** the system identifies the underlying package represented by that entry
 
+#### Scenario: package-prefix mapping is parseable
+- **WHEN** an entry maps a package-prefix specifier such as `react/` to a supported CDN URL with a parseable package and version
+- **THEN** the system identifies the underlying package represented by that entry
+
+#### Scenario: remap-style key points to a parseable CDN destination
+- **WHEN** an entry uses a URL-like or path-like remap key and its destination value is a supported CDN URL with a parseable package and version
+- **THEN** the system identifies the package from the destination value alone
+- **AND** the system does not infer the package identity from the remap-style key itself
+
 ### Requirement: Pinned Version Extraction
 The system SHALL validate that supported CDN-backed mappings use a parseable pinned package version for update analysis.
 
@@ -67,10 +76,25 @@ The system SHALL conflate related entries for the same package to a single candi
 - **THEN** the system merges those occurrences into one package update candidate
 - **AND** the system retains the source occurrences needed for reporting
 
+#### Scenario: multiple inline import maps contribute one package candidate
+- **WHEN** the same package is discovered across multiple extracted inline import maps in one HTML file
+- **THEN** the system merges those occurrences into one package update candidate
+- **AND** the system retains per-import-map provenance for diagnostics and reporting
+
+#### Scenario: multiple destinations resolve to one package identity
+- **WHEN** multiple supported CDN-backed entries resolve to the same parsed package identity
+- **THEN** the system deduplicates them by package identity for update analysis
+- **AND** the system retains the distinct destination values as source metadata
+
 #### Scenario: related entries are inconsistent
 - **WHEN** entries believed to represent the same package do not agree on their current pinned version
 - **THEN** the system reports the inconsistency
 - **AND** the system does not silently normalize conflicting current versions
+- **AND** the system still determines a single candidate target version for that package when possible
+
+#### Scenario: related entries use different supported CDN destinations
+- **WHEN** entries believed to represent the same package resolve through different supported CDN destination values or CDN families
+- **THEN** the system reports that destination skew as a distinct warning condition
 - **AND** the system still determines a single candidate target version for that package when possible
 
 ### Requirement: Latest Version Resolution
