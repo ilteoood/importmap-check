@@ -1,5 +1,11 @@
 schema: spec-driven
 
+context: |
+  Tech stack: Node.js ESM CLI.
+  User-facing behavior is documented in README.md and should be kept in sync with implemented CLI changes.
+  After making repo changes, run `npm run format` from a shell where the expected Node version is already active.
+  Treat formatting as part of completion: auto-fix what can be fixed and stop if formatting or linting remains broken.
+
 # Project context (optional)
 # This is shown to AI when creating artifacts.
 # Add your tech stack, conventions, style guides, domain knowledge, etc.

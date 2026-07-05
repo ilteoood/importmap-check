@@ -1,10 +1,4 @@
-# Reporting
-
-## Purpose
-
-Define the human-readable reporting behavior for `esm-check-updates` v1.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Human-Readable Terminal Output
 The system SHALL present analysis results in human-readable terminal output.
@@ -112,15 +106,3 @@ The system SHALL treat partial package lookup success as a successful check in v
 - **WHEN** one or more package lookups fail but the overall check completes and other package results were produced
 - **THEN** the system returns a successful check result
 - **AND** the output reports the lookup failures clearly
-
-## Non-Goals
-
-- JSON output
-- Interactive output
-- Exact frozen spacing or column width rules
-- Output formats for file rewrite mode
-
-## Open Questions
-
-- Whether unsupported CDN entries should always be shown by default
-- Whether later versions should add a machine-readable report mode

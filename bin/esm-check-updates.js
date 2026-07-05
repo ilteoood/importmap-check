@@ -4,6 +4,8 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 
 import packageJson from "../package.json" with { type: "json" };
+import { analyzeTarget } from "../src/index.js";
+import { formatReport } from "../src/report.js";
 
 const HELP_FLAGS = new Set(["--help", "-h"]);
 const VERSION_FLAGS = new Set(["--version", "-v"]);
@@ -108,9 +110,11 @@ const main = async (argv = process.argv.slice(2)) => {
   }
 
   await validateTargetPath(parsed.targetPath);
-  throw createError(
-    `Target analysis is not implemented yet for ${parsed.targetPath}. The v1 CLI currently stops after check-only validation.`,
-  );
+
+  const report = await analyzeTarget(parsed.targetPath);
+  writeStdout(formatReport(report));
+
+  return 0;
 };
 
 const run = async (argv = process.argv.slice(2)) => {

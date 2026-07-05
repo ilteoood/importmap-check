@@ -19,6 +19,8 @@ export default [
       sourceType: "module",
       globals: {
         TextDecoder: "readonly",
+        URL: "readonly",
+        fetch: "readonly",
         process: "readonly",
       },
     },

@@ -1,10 +1,4 @@
-# Package Resolution
-
-## Purpose
-
-Define how `esm-check-updates` v1 identifies updateable packages from supported CDN-backed import map entries.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Supported CDN Families
 The system SHALL support `esm.sh` and `jsdelivr` CDN URL families in v1.
@@ -132,18 +126,3 @@ The implementation SHALL include code comments with authoritative document links
 #### Scenario: CDN-specific parsing behavior is implemented from documented service rules
 - **WHEN** the implementation adds or maintains logic for supported CDN-specific URL parsing or query handling based on published service documentation
 - **THEN** the relevant code includes a concise comment with a link to that authoritative document when such a document exists
-
-## Non-Goals
-
-- Split target versions for related entries of the same package
-- Support for CDN families beyond `esm.sh` and `jsdelivr`
-- Implicit version inference from non-pinned URLs
-- Resolution or normalization of semver ranges or dist-tags such as `^`, `~`, `latest`, or `beta`
-- Prerelease-oriented update targeting
-
-## Open Questions
-
-- Whether unsupported CDNs should always be listed in output or only in verbose modes later
-- Whether later versions should resolve semver ranges or dist-tags to concrete pinned versions while preserving user intent during reporting or rewrite mode
-- Which additional CDN families should follow `esm.sh` and `jsdelivr` in later versions, such as `esm.unpkg.com` / `unpkg` or `jspm.io`
-- Whether later versions should support configurable update targeting beyond latest stable
