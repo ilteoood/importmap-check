@@ -272,6 +272,26 @@ test("warns for non-pinned selectors on supported cdns", async () => {
   );
 });
 
+test("accepts prerelease versions as concrete pins", async () => {
+  const targetPath = await copyFixture("prerelease-pinned.html", "index.html");
+  const result = await runCli([targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      next: "16.3.0",
+      swr: "2.2.5",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  assert.doesNotMatch(result.stdout, /Could not parse/);
+  assert.doesNotMatch(result.stdout, /non-versioned/);
+  assert.match(
+    result.stdout,
+    /next\s+\|\s+16\.3\.0-preview\.5\s+\|\s+16\.3\.0/,
+  );
+  assert.match(result.stdout, /swr\s+\|\s+2\.2\.5-canary\.12\s+\|\s+2\.2\.5/);
+});
+
 test("emits an integrity note when an updated mapping has integrity metadata", async () => {
   const targetPath = await copyFixture("integrity-note.html", "index.html");
   const result = await runCli([targetPath], { NO_COLOR: "1" });

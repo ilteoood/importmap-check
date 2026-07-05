@@ -62,6 +62,12 @@ The system SHALL validate that supported CDN-backed mappings use a parseable pin
 - **THEN** the system treats that entry as out of the pinned-version support scope for v1
 - **AND** the system reports the entry as non-versioned or otherwise not yet supported for update analysis
 
+#### Scenario: prerelease version is used as a pinned version
+- **WHEN** an entry contains a prerelease version such as `16.3.0-preview.5` or `16.3.0-canary.78` in a supported CDN URL format
+- **THEN** the system treats the prerelease version as a concrete pinned version for update analysis in v1
+- **AND** the system compares the prerelease version against the stable `latest` dist-tag from the npm registry
+- **AND** the system does not attempt channel-aware prerelease comparison (e.g. comparing `preview` to `preview`) in v1
+
 ### Requirement: Package-Level Conflation
 The system SHALL conflate related entries for the same package to a single candidate target version in v1.
 
