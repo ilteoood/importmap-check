@@ -249,6 +249,29 @@ test("warns for supported cdn entries that are unparseable", async () => {
   assert.match(result.stdout, /react-dom\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0/);
 });
 
+test("warns for non-pinned selectors on supported cdns", async () => {
+  const targetPath = await copyFixture(
+    "non-pinned-supported.html",
+    "index.html",
+  );
+  const result = await runCli([targetPath], { NO_COLOR: "1" });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /\n\n## Warnings\n/);
+  assert.match(
+    result.stdout,
+    /Could not parse package identity and version from "https:\/\/esm\.sh\/react@18"/,
+  );
+  assert.match(
+    result.stdout,
+    /Could not parse package identity and version from "https:\/\/cdn\.jsdelivr\.net\/npm\/react-dom@\^19\.2\.3\/client\/\+esm"/,
+  );
+  assert.match(
+    result.stdout,
+    /Could not parse package identity and version from "https:\/\/esm\.sh\/swr\?deps=react@18,react-dom@19\.2\.3" for key "swr"/,
+  );
+});
+
 test("emits an integrity note when an updated mapping has integrity metadata", async () => {
   const targetPath = await copyFixture("integrity-note.html", "index.html");
   const result = await runCli([targetPath], { NO_COLOR: "1" });

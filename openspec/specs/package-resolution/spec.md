@@ -51,11 +51,11 @@ The system SHALL extract a package identity from supported CDN-backed mappings w
 The system SHALL validate that supported CDN-backed mappings use a parseable pinned package version for update analysis.
 
 #### Scenario: pinned version is present and parseable
-- **WHEN** an entry contains an explicit package version in a supported CDN URL format
+- **WHEN** an entry contains an explicit concrete pinned package version such as `18.3.1` in a supported CDN URL format
 - **THEN** the system uses that version as the current version for update analysis
 
 #### Scenario: pinned version is present in an esm.sh dependency query
-- **WHEN** an `esm.sh` URL expresses package versions through a parseable `?deps=` query string
+- **WHEN** an `esm.sh` URL expresses package versions through a `?deps=` query string containing explicit concrete pinned package versions such as `18.3.1`
 - **THEN** the system uses those pinned dependency versions as current versions for update analysis
 
 #### Scenario: pinned version is absent or not parseable

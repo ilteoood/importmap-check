@@ -201,6 +201,10 @@ const extractVersionedPackage = (firstSegment, scopeSegment = null) => {
     return null;
   }
 
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(currentVersion)) {
+    return null;
+  }
+
   return { currentVersion, packageName };
 };
 
