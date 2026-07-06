@@ -35,9 +35,12 @@ The system SHALL report update findings by package identity rather than by raw s
 - **THEN** the system reports a single package-level candidate target version when possible
 - **AND** the report makes the current-version skew visible to the user as an explicit current version list such as `18.2.0, 18.3.1`
 
-#### Scenario: package results are displayed in aligned columns
+#### Scenario: package results are displayed in three aligned columns
 - **WHEN** the system reports package-level updates or current packages in terminal output
-- **THEN** the output may use aligned columns such as package, current version, and latest version to improve readability
+- **THEN** the output uses aligned columns: Package, Resolved, and Latest
+- **AND** the Package column shows the package name, optionally with the original specifier in parentheses when it was a range, selector, or dist-tag
+- **AND** the Resolved column shows the concrete resolved version
+- **AND** the Latest column shows the npm registry `latest` dist-tag version
 
 ### Requirement: Colored Update Presentation
 The system SHALL use terminal color to distinguish update severity in supported terminals.
