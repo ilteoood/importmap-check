@@ -205,7 +205,7 @@ const extractVersionedPackage = (firstSegment, scopeSegment = null) => {
     return null;
   }
 
-  return { currentVersion, packageName };
+  return { currentVersion, packageName, specifier: "" };
 };
 
 const parseJsdelivrPackage = (parsedUrl) => {
@@ -315,6 +315,21 @@ const parseDependencyPins = (value) => {
     });
 };
 
+const deriveSpecifier = (version) => {
+  return version ?? "";
+};
+
+const buildCdnSpec = (cdnFamily, specifier) => {
+  return specifier ? `${cdnFamily}@${specifier}` : cdnFamily;
+};
+
+const formatSourceLabel = (occurrence) => {
+  return `${occurrence.key} (${buildCdnSpec(
+    occurrence.cdnFamily,
+    occurrence.specifier,
+  )})`;
+};
+
 const collectPackageOccurrences = (entries) => {
   const warnings = [];
   const occurrences = [];
@@ -334,6 +349,8 @@ const collectPackageOccurrences = (entries) => {
       continue;
     }
 
+    const specifier = deriveSpecifier(parsed.specifier);
+
     occurrences.push({
       cdnFamily: parsed.cdnFamily,
       currentVersion: parsed.currentVersion,
@@ -344,6 +361,7 @@ const collectPackageOccurrences = (entries) => {
       keyKind: entry.keyKind,
       packageName: parsed.packageName,
       sourcePath: entry.sourcePath,
+      specifier,
     });
 
     for (const dependencyPin of parseDependencyPins(entry.value)) {
@@ -355,6 +373,8 @@ const collectPackageOccurrences = (entries) => {
         continue;
       }
 
+      const depSpecifier = deriveSpecifier(dependencyPin.specifier);
+
       occurrences.push({
         cdnFamily: "esm.sh",
         currentVersion: dependencyPin.currentVersion,
@@ -365,6 +385,7 @@ const collectPackageOccurrences = (entries) => {
         keyKind: entry.keyKind,
         packageName: dependencyPin.packageName,
         sourcePath: entry.sourcePath,
+        specifier: depSpecifier,
       });
     }
   }
@@ -491,9 +512,46 @@ const hasMeaningfulDestinationSkew = (occurrences) => {
   return uniqueProviders.size > 1 || uniqueVersions.size > 1;
 };
 
+const buildPackageSources = (occurrences) => {
+  const seen = new Set();
+  const sources = [];
+
+  for (const occurrence of occurrences) {
+    const key = `${occurrence.key}\0${occurrence.cdnFamily}\0${occurrence.specifier ?? ""}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    sources.push({
+      cdnFamily: occurrence.cdnFamily,
+      cdnSpec: buildCdnSpec(occurrence.cdnFamily, occurrence.specifier ?? ""),
+      importMapKey: occurrence.key,
+      label: formatSourceLabel(occurrence),
+      specifier: occurrence.specifier ?? "",
+    });
+  }
+
+  sources.sort((left, right) => {
+    if (left.importMapKey !== right.importMapKey) {
+      return left.importMapKey.localeCompare(right.importMapKey);
+    }
+
+    if (left.cdnFamily !== right.cdnFamily) {
+      return left.cdnFamily.localeCompare(right.cdnFamily);
+    }
+
+    return left.specifier.localeCompare(right.specifier);
+  });
+
+  return sources;
+};
+
 export const analyzeTarget = async (targetPath, options = {}) => {
   const resolveLatestVersion =
     options.resolveLatestVersion ?? defaultResolveLatestVersion;
+  const withSources = options.withSources ?? false;
   const importMaps = await loadImportMaps(targetPath);
   const { normalizedEntries, warnings: normalizationWarnings } =
     normalizeImportMaps(targetPath, importMaps);
@@ -548,7 +606,7 @@ export const analyzeTarget = async (targetPath, options = {}) => {
       }
     }
 
-    packageResults.push({
+    const result = {
       currentVersions,
       hasUpdate,
       latestVersion,
@@ -556,7 +614,13 @@ export const analyzeTarget = async (targetPath, options = {}) => {
       severity: hasUpdate
         ? determineSeverity(currentVersions[0], latestVersion)
         : null,
-    });
+    };
+
+    if (withSources) {
+      result.sources = buildPackageSources(packageGroup.occurrences);
+    }
+
+    packageResults.push(result);
   }
 
   packageResults.sort((left, right) =>

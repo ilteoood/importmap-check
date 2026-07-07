@@ -133,10 +133,252 @@ const getSeverityColor = (severity) => {
   return "green";
 };
 
+const FALLBACK_WIDTH = 120;
+const MIN_SOURCE_WIDTH = 20;
+const SOURCE_CONTINUATION_INDENT = 2;
+
+const resolveAvailableWidth = (options) => {
+  if (typeof options.width === "number") {
+    return options.width;
+  }
+
+  if (
+    typeof process.stdout.columns === "number" &&
+    process.stdout.columns > 0
+  ) {
+    return process.stdout.columns;
+  }
+
+  return FALLBACK_WIDTH;
+};
+
+const wrapSourceLabel = (label, sourceWidth) => {
+  const indent = SOURCE_CONTINUATION_INDENT;
+  const firstWidth = sourceWidth;
+  const continuationWidth = sourceWidth - indent;
+  const words = label.split(" ");
+  const lines = [];
+  let current = "";
+  let currentIsFirst = true;
+
+  const flush = () => {
+    if (current.length > 0) {
+      lines.push(current);
+      current = "";
+      currentIsFirst = false;
+    }
+  };
+
+  const maxWidth = () => {
+    return currentIsFirst ? firstWidth : continuationWidth;
+  };
+
+  for (const word of words) {
+    const wordLen = stripAnsi(word).length;
+
+    if (wordLen > maxWidth()) {
+      flush();
+      let remaining = word;
+
+      while (remaining.length > 0) {
+        const width = currentIsFirst ? firstWidth : continuationWidth;
+
+        lines.push(remaining.slice(0, width));
+        remaining = remaining.slice(width);
+        currentIsFirst = false;
+      }
+
+      continue;
+    }
+
+    const proposed = current.length > 0 ? `${current} ${word}` : word;
+
+    if (stripAnsi(proposed).length <= maxWidth()) {
+      current = proposed;
+    } else {
+      flush();
+      current = word;
+    }
+  }
+
+  flush();
+
+  return lines.map((line, index) => {
+    const stripped = stripAnsi(line);
+
+    if (index === 0 || stripped.startsWith(" ".repeat(indent))) {
+      return line;
+    }
+
+    return `${" ".repeat(indent)}${line}`;
+  });
+};
+
+const formatSourceDisplayLabel = (source, colorEnabled) => {
+  return `${source.importMapKey} ${colorize(
+    `(${source.cdnSpec})`,
+    "gray",
+    colorEnabled,
+  )}`;
+};
+
+const renderSourceCell = (sources, sourceWidth, colorEnabled) => {
+  const labels = sources.map((source) =>
+    formatSourceDisplayLabel(source, colorEnabled),
+  );
+  const joined = labels.join(", ");
+
+  if (stripAnsi(joined).length <= sourceWidth) {
+    return [joined];
+  }
+
+  const lines = [];
+
+  for (const label of labels) {
+    lines.push(...wrapSourceLabel(label, sourceWidth));
+  }
+
+  return lines;
+};
+
+const createContinuationPrefix = (widths, colorEnabled) => {
+  return widths
+    .map((width) => " ".repeat(width))
+    .join(colorize(" | ", "gray", colorEnabled));
+};
+
+const renderPackageRow = (result, widths, colorEnabled) => {
+  const {
+    currentWidth,
+    latestWidth,
+    packageWidth,
+    sourceWidth,
+    sourcesEnabled,
+  } = widths;
+  const packageText = result.severity
+    ? colorize(
+        result.packageName,
+        getSeverityColor(result.severity),
+        colorEnabled,
+      )
+    : result.packageName;
+  const currentText = result.currentVersions.join(", ");
+  const latestText = result.hasUpdate
+    ? formatLatestVersion(
+        result.currentVersions,
+        result.latestVersion,
+        colorEnabled,
+      )
+    : result.latestVersion;
+
+  if (!sourcesEnabled) {
+    return [
+      createTableRow(
+        [
+          { text: packageText, width: packageWidth },
+          { text: currentText, width: currentWidth },
+          { text: latestText, width: latestWidth },
+        ],
+        colorEnabled,
+      ),
+    ];
+  }
+
+  const sourceLines =
+    result.sources && result.sources.length > 0
+      ? renderSourceCell(result.sources, sourceWidth, colorEnabled)
+      : [""];
+
+  const lines = [];
+
+  for (let index = 0; index < sourceLines.length; index += 1) {
+    const sourceLine = sourceLines[index];
+
+    if (index === 0) {
+      lines.push(
+        createTableRow(
+          [
+            { text: packageText, width: packageWidth },
+            { text: currentText, width: currentWidth },
+            { text: latestText, width: latestWidth },
+            { text: sourceLine, width: sourceWidth },
+          ],
+          colorEnabled,
+        ),
+      );
+    } else {
+      lines.push(
+        `${createContinuationPrefix([packageWidth, currentWidth, latestWidth], colorEnabled)}${colorize(" | ", "gray", colorEnabled)}${sourceLine}`,
+      );
+    }
+  }
+
+  return lines;
+};
+
+const renderTableSection = (results, widths, colorEnabled) => {
+  const columnNames = widths.sourcesEnabled
+    ? [
+        { text: "Package", width: widths.packageWidth },
+        { text: "Current", width: widths.currentWidth },
+        { text: "Latest", width: widths.latestWidth },
+        { text: "Source", width: widths.sourceWidth },
+      ]
+    : [
+        { text: "Package", width: widths.packageWidth },
+        { text: "Current", width: widths.currentWidth },
+        { text: "Latest", width: widths.latestWidth },
+      ];
+
+  const sectionLines = [...createTableHeader(columnNames, colorEnabled)];
+
+  for (const result of results) {
+    sectionLines.push(...renderPackageRow(result, widths, colorEnabled));
+  }
+
+  return sectionLines;
+};
+
+const computeSectionWidths = (results, sourcesEnabled, availableWidth) => {
+  const packageWidth = Math.max(
+    ...results.map((result) => result.packageName.length),
+    "Package".length,
+  );
+  const currentWidth = Math.max(
+    ...results.map((result) => result.currentVersions.join(", ").length),
+    "Current".length,
+  );
+  const latestWidth = Math.max(
+    ...results.map((result) => result.latestVersion.length),
+    "Latest".length,
+  );
+
+  if (!sourcesEnabled || results.length === 0) {
+    return { currentWidth, latestWidth, packageWidth, sourcesEnabled };
+  }
+
+  const delimiterWidth = 3;
+  const usedWidth =
+    packageWidth + currentWidth + latestWidth + delimiterWidth * 3;
+  const sourceWidth = Math.max(MIN_SOURCE_WIDTH, availableWidth - usedWidth);
+
+  return {
+    currentWidth,
+    latestWidth,
+    packageWidth,
+    sourceWidth,
+    sourcesEnabled,
+  };
+};
+
 export const formatReport = (report, options = {}) => {
   const colorEnabled =
     options.colorEnabled ??
     (Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined);
+  const sourcesEnabled = options.sourcesEnabled ?? false;
+  const availableWidth = sourcesEnabled
+    ? resolveAvailableWidth(options)
+    : undefined;
   const lines = ["esm-check-updates", `Target: ${report.targetPath}`];
   const updates = report.packageResults.filter((result) => result.hasUpdate);
   const updateLines = [];
@@ -144,55 +386,13 @@ export const formatReport = (report, options = {}) => {
   if (updates.length === 0) {
     updateLines.push("No updates are available.");
   } else {
-    const packageWidth = Math.max(
-      ...updates.map((update) => update.packageName.length),
-      "Package".length,
-    );
-    const currentWidth = Math.max(
-      ...updates.map((update) => update.currentVersions.join(", ").length),
-      "Current".length,
-    );
-    const latestWidth = Math.max(
-      ...updates.map((update) => update.latestVersion.length),
-      "Latest".length,
+    const widths = computeSectionWidths(
+      updates,
+      sourcesEnabled,
+      availableWidth,
     );
 
-    updateLines.push(
-      ...createTableHeader(
-        [
-          { text: "Package", width: packageWidth },
-          { text: "Current", width: currentWidth },
-          { text: "Latest", width: latestWidth },
-        ],
-        colorEnabled,
-      ),
-    );
-
-    for (const update of updates) {
-      const latestText = formatLatestVersion(
-        update.currentVersions,
-        update.latestVersion,
-        colorEnabled,
-      );
-
-      updateLines.push(
-        createTableRow(
-          [
-            {
-              text: colorize(
-                update.packageName,
-                getSeverityColor(update.severity),
-                colorEnabled,
-              ),
-              width: packageWidth,
-            },
-            { text: update.currentVersions.join(", "), width: currentWidth },
-            { text: latestText, width: latestWidth },
-          ],
-          colorEnabled,
-        ),
-      );
-    }
+    updateLines.push(...renderTableSection(updates, widths, colorEnabled));
   }
 
   appendSection(lines, "Updates", updateLines, colorEnabled);
@@ -203,44 +403,15 @@ export const formatReport = (report, options = {}) => {
   const currentLines = [];
 
   if (currentPackages.length > 0) {
-    const packageWidth = Math.max(
-      ...currentPackages.map((current) => current.packageName.length),
-      "Package".length,
-    );
-    const currentWidth = Math.max(
-      ...currentPackages.map(
-        (current) => current.currentVersions.join(", ").length,
-      ),
-      "Current".length,
-    );
-    const latestWidth = Math.max(
-      ...currentPackages.map((current) => current.latestVersion.length),
-      "Latest".length,
+    const widths = computeSectionWidths(
+      currentPackages,
+      sourcesEnabled,
+      availableWidth,
     );
 
     currentLines.push(
-      ...createTableHeader(
-        [
-          { text: "Package", width: packageWidth },
-          { text: "Current", width: currentWidth },
-          { text: "Latest", width: latestWidth },
-        ],
-        colorEnabled,
-      ),
+      ...renderTableSection(currentPackages, widths, colorEnabled),
     );
-
-    for (const current of currentPackages) {
-      currentLines.push(
-        createTableRow(
-          [
-            { text: current.packageName, width: packageWidth },
-            { text: current.currentVersions.join(", "), width: currentWidth },
-            { text: current.latestVersion, width: latestWidth },
-          ],
-          colorEnabled,
-        ),
-      );
-    }
   }
 
   appendSection(lines, "Current", currentLines, colorEnabled);

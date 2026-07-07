@@ -14,8 +14,13 @@ Features:
 ## Usage
 
 ```sh
-$ esm-check-updates <target-path>
+$ esm-check-updates [options] <target-path>
 ```
+
+Options:
+
+- `--sources` — Show the import-map entry origins that contributed to each conflated package row.
+- `--width <num>` — Override the available report width (used with `--sources`). Defaults to the terminal width, or `120` when not running in a TTY.
 
 Supported target types:
 
@@ -28,6 +33,7 @@ Current behavior:
 - Supports package-style keys and remap-style URL/path keys
 - Analyzes `jsdelivr` and `esm.sh` destination URLs
 - Combines multiple inline import maps into one package-level analysis result
+- Optionally shows contributing import-map entries with `--sources`
 - Warns for supported-but-unparseable entries and unsupported `scopes`
 - Does not update files in place yet
 

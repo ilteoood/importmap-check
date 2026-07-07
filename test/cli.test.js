@@ -71,8 +71,19 @@ test("prints help with --help", async () => {
   const result = await runCli(["--help"]);
 
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /Usage: esm-check-updates <target-path>/);
+  assert.match(
+    result.stdout,
+    /Usage: esm-check-updates \[options\] <target-path>/,
+  );
   assert.match(result.stdout, /check-only/i);
+  assert.match(
+    result.stdout,
+    /--sources\s+Show source import-map entries in the report/,
+  );
+  assert.match(
+    result.stdout,
+    /--width <num>\s+Override available report width/,
+  );
   assert.equal(result.stderr, "");
 });
 
@@ -302,4 +313,61 @@ test("emits an integrity note when an updated mapping has integrity metadata", a
     result.stdout,
     /integrity metadata tied to a URL that would need review/,
   );
+});
+
+test("--sources enables the Source column", async () => {
+  const targetPath = await copyFixture("inline-importmap.html", "index.html");
+  const result = await runCli(["--sources", targetPath], { NO_COLOR: "1" });
+
+  assert.equal(result.code, 0);
+  assert.match(
+    result.stdout,
+    /Package\s+\|\s+Current\s+\|\s+Latest\s+\|\s+Source/,
+  );
+  assert.match(
+    result.stdout,
+    /react\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0\s+\|\s+react \(jsdelivr\)/,
+  );
+  assert.equal(result.stderr, "");
+});
+
+test("--width overrides terminal width when --sources is provided", async () => {
+  const targetPath = await copyFixture("scopes-and-remaps.html", "index.html");
+  const result = await runCli(["--sources", "--width", "60", targetPath], {
+    NO_COLOR: "1",
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /Source/);
+  // At width 60 the source column is narrow enough that labels wrap.
+  assert.match(result.stdout, /\|\s+\.\/vendor\/react\.js/);
+});
+
+test("rejects invalid --width values", async () => {
+  for (const value of ["abc", "0", "39"]) {
+    const result = await runCli(["--width", value, "target.json"]);
+
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, /--width must be a positive integer >= 40/);
+    assert.equal(result.stdout, "");
+  }
+});
+
+test("accepts --width without --sources", async () => {
+  const targetPath = await copyFixture("inline-importmap.html", "index.html");
+  const result = await runCli(["--width", "100", targetPath], {
+    NO_COLOR: "1",
+  });
+
+  assert.equal(result.code, 0);
+  assert.doesNotMatch(result.stdout, /Source/);
+  assert.match(result.stdout, /Package\s+\|\s+Current\s+\|\s+Latest/);
+  assert.equal(result.stderr, "");
+});
+
+test("rejects --width with a non-numeric value", async () => {
+  const result = await runCli(["--width", "target.json"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /--width must be a positive integer >= 40/);
 });

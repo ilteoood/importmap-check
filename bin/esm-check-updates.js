@@ -10,6 +10,9 @@ import { formatReport } from "../src/report.js";
 const HELP_FLAGS = new Set(["--help", "-h"]);
 const VERSION_FLAGS = new Set(["--version", "-v"]);
 const UPDATE_FLAGS = new Set(["--update", "-u"]);
+const SOURCES_FLAG = "--sources";
+const WIDTH_FLAG = "--width";
+const MIN_WIDTH = 40;
 const SUPPORTED_EXTENSIONS = new Set([".json", ".html", ".htm"]);
 
 const writeStdout = (message) => {
@@ -29,22 +32,28 @@ const createError = (message, code = 1) => {
 
 const formatHelp = () => {
   return [
-    "Usage: esm-check-updates <target-path>",
+    "Usage: esm-check-updates [options] <target-path>",
     "",
     "Check-only v1 CLI for import map JSON and HTML files with inline import maps.",
     "This mode is non-destructive and does not update files.",
     "",
     "Options:",
-    "  -h, --help     Show help",
-    "  -v, --version  Show version",
-    "  -u, --update   Unsupported in v1",
+    "  -h, --help          Show help",
+    "  -v, --version       Show version",
+    "      --sources       Show source import-map entries in the report",
+    "      --width <num>   Override available report width (used with --sources)",
+    "  -u, --update        Unsupported in v1",
   ].join("\n");
 };
 
 const parseArgs = (argv) => {
   const positional = [];
+  let sources = false;
+  let width;
 
-  for (const arg of argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
     if (HELP_FLAGS.has(arg)) {
       return { mode: "help" };
     }
@@ -55,6 +64,35 @@ const parseArgs = (argv) => {
 
     if (UPDATE_FLAGS.has(arg)) {
       throw createError("Update mode is not available in v1.");
+    }
+
+    if (arg === SOURCES_FLAG) {
+      sources = true;
+      continue;
+    }
+
+    if (arg === WIDTH_FLAG) {
+      const nextArg = argv[index + 1];
+
+      if (nextArg === undefined || nextArg.startsWith("-")) {
+        throw createError("--width requires a positive integer value.");
+      }
+
+      const parsed = Number(nextArg);
+
+      if (
+        !Number.isInteger(parsed) ||
+        parsed < MIN_WIDTH ||
+        String(parsed) !== nextArg
+      ) {
+        throw createError(
+          `--width must be a positive integer >= ${MIN_WIDTH}.`,
+        );
+      }
+
+      width = parsed;
+      index += 1;
+      continue;
     }
 
     if (arg.startsWith("-")) {
@@ -74,7 +112,9 @@ const parseArgs = (argv) => {
 
   return {
     mode: "check",
+    sources,
     targetPath: positional[0],
+    width,
   };
 };
 
@@ -111,8 +151,16 @@ const main = async (argv = process.argv.slice(2)) => {
 
   await validateTargetPath(parsed.targetPath);
 
-  const report = await analyzeTarget(parsed.targetPath);
-  writeStdout(formatReport(report));
+  const report = await analyzeTarget(parsed.targetPath, {
+    withSources: parsed.sources,
+  });
+  writeStdout(
+    formatReport(report, {
+      colorEnabled: undefined,
+      sourcesEnabled: parsed.sources,
+      width: parsed.width,
+    }),
+  );
 
   return 0;
 };
