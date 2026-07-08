@@ -119,6 +119,14 @@ test("rejects unknown flags", async () => {
   assert.equal(result.stdout, "");
 });
 
+test("rejects flag=value syntax as an unknown flag", async () => {
+  const result = await runCli(["--width=100", "target.json"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Unknown flag: --width=100/);
+  assert.equal(result.stdout, "");
+});
+
 test("rejects unsupported update flag", async () => {
   const result = await runCli(["--update"]);
 
@@ -159,7 +167,7 @@ test("analyzes a valid json import map", async () => {
   assert.equal(result.code, 0);
   assert.match(result.stdout, /esm-check-updates/);
   assert.match(result.stdout, /\n\n## Updates\n/);
-  assert.match(result.stdout, /Package\s+\|\s+Current\s+\|\s+Latest/);
+  assert.match(result.stdout, /Package\s+\|\s+Resolved\s+\|\s+Latest/);
   assert.match(result.stdout, /react\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0/);
   assert.match(result.stdout, /react-dom\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0/);
   assert.equal(result.stderr, "");
@@ -260,26 +268,309 @@ test("warns for supported cdn entries that are unparseable", async () => {
   assert.match(result.stdout, /react-dom\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0/);
 });
 
-test("warns for non-pinned selectors on supported cdns", async () => {
+test("resolves non-pinned specifiers on supported cdns", async () => {
   const targetPath = await copyFixture(
     "non-pinned-supported.html",
     "index.html",
   );
-  const result = await runCli([targetPath], { NO_COLOR: "1" });
+  const result = await runCli([targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "react@18": "18.3.1",
+      "react-dom@^19.2.3": "19.2.7",
+    }),
+  });
 
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /\n\n## Warnings\n/);
+  assert.match(result.stdout, /\n\n## Updates\n/);
+  // react@18 (root esm.sh entry plus swr ?deps= pin) both resolve to 18.3.1;
+  // latest is 19.3.0, so it lands in Updates with the "18" specifier shown.
+  assert.match(result.stdout, /react \(18\)\s+\|\s+18\.3\.1\s+\|\s+19\.3\.0/);
+  // react-dom has two occurrences: the root ^19.2.3 range (resolves to
+  // 19.2.7) and the swr ?deps=react-dom@19.2.3 pin (19.2.3). The skew
+  // surfaces as a current version list.
   assert.match(
     result.stdout,
-    /Could not parse package identity and version from "https:\/\/esm\.sh\/react@18"/,
+    /react-dom \(\^19\.2\.3\)\s+\|\s+19\.2\.3, 19\.2\.7\s+\|\s+19\.3\.0/,
   );
   assert.match(
     result.stdout,
-    /Could not parse package identity and version from "https:\/\/cdn\.jsdelivr\.net\/npm\/react-dom@\^19\.2\.3\/client\/\+esm"/,
+    /react-dom resolves through different CDN providers or pinned versions/,
   );
+  // The swr URL itself has no @ specifier at all and stays unparseable.
   assert.match(
     result.stdout,
     /Could not parse package identity and version from "https:\/\/esm\.sh\/swr\?deps=react@18,react-dom@19\.2\.3" for key "swr"/,
+  );
+  // The previously-warning non-pinned selectors no longer warn.
+  assert.doesNotMatch(
+    result.stdout,
+    /Could not parse package identity and version from "https:\/\/esm\.sh\/react@18"/,
+  );
+  assert.doesNotMatch(
+    result.stdout,
+    /Could not parse package identity and version from "https:\/\/cdn\.jsdelivr\.net\/npm\/react-dom@\^19\.2\.3/,
+  );
+});
+
+test("resolves dist-tag specifiers on supported cdns", async () => {
+  const fixtureDir = await createFixtureDir();
+  const targetPath = path.join(fixtureDir, "index.html");
+  await writeFile(
+    targetPath,
+    [
+      '<!doctype html><html><body><script type="importmap">',
+      JSON.stringify(
+        {
+          imports: {
+            react: "https://esm.sh/react@latest",
+            "react-dom/client": "https://esm.sh/react-dom@beta/client",
+          },
+        },
+        null,
+        2,
+      ),
+      "</script></body></html>",
+    ].join("\n"),
+  );
+  const result = await runCli([targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "react@latest": "19.3.0",
+      "react-dom@beta": "20.0.0-beta.1",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /\n\n## Updates\n/);
+  // react@latest resolves to the same version as the stable latest, so it
+  // appears in the Current section with both specifier and version shown.
+  assert.match(result.stdout, /\n\n## Current\n/);
+  assert.match(
+    result.stdout,
+    /react \(latest\)\s+\|\s+19\.3\.0\s+\|\s+19\.3\.0/,
+  );
+  // react-dom@beta resolves to a prerelease above the stable latest, so it
+  // lands in Updates with the "beta" specifier shown.
+  assert.match(
+    result.stdout,
+    /react-dom \(beta\)\s+\|\s+20\.0\.0-beta\.1\s+\|\s+19\.3\.0/,
+  );
+});
+
+test("resolves arbitrary npm dist-tags outside the common allowlist", async () => {
+  // npm dist-tags are arbitrary strings — `preview`, `insider`, `legacy`,
+  // etc. are all valid registry dist-tags even though they aren't in the
+  // common `latest|beta|next|canary|alpha` set.
+  const fixtureDir = await createFixtureDir();
+  const targetPath = path.join(fixtureDir, "index.html");
+  await writeFile(
+    targetPath,
+    [
+      '<!doctype html><html><body><script type="importmap">',
+      JSON.stringify(
+        {
+          imports: {
+            react: "https://esm.sh/react@preview",
+            "react-dom/client": "https://esm.sh/react-dom@insider/client",
+          },
+        },
+        null,
+        2,
+      ),
+      "</script></body></html>",
+    ].join("\n"),
+  );
+  const result = await runCli([targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "react@preview": "19.4.0-preview.2",
+      "react-dom@insider": "19.4.0-insider.1",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /\n\n## Updates\n/);
+  assert.match(
+    result.stdout,
+    /react \(preview\)\s+\|\s+19\.4\.0-preview\.2\s+\|\s+19\.3\.0/,
+  );
+  assert.match(
+    result.stdout,
+    /react-dom \(insider\)\s+\|\s+19\.4\.0-insider\.1\s+\|\s+19\.3\.0/,
+  );
+  assert.doesNotMatch(
+    result.stdout,
+    /Could not parse package identity and version/,
+  );
+});
+
+test("resolves minor-only selectors on supported cdns", async () => {
+  const fixtureDir = await createFixtureDir();
+  const targetPath = path.join(fixtureDir, "index.html");
+  await writeFile(
+    targetPath,
+    [
+      '<!doctype html><html><body><script type="importmap">',
+      JSON.stringify(
+        {
+          imports: {
+            react: "https://esm.sh/react@18.3",
+            "react-dom/client": "https://esm.sh/react-dom@18.3/client",
+          },
+        },
+        null,
+        2,
+      ),
+      "</script></body></html>",
+    ].join("\n"),
+  );
+  const result = await runCli([targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "react@18.3": "18.3.1",
+      "react-dom@18.3": "18.3.1",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /\n\n## Updates\n/);
+  assert.match(
+    result.stdout,
+    /react \(18\.3\)\s+\|\s+18\.3\.1\s+\|\s+19\.3\.0/,
+  );
+  assert.match(
+    result.stdout,
+    /react-dom \(18\.3\)\s+\|\s+18\.3\.1\s+\|\s+19\.3\.0/,
+  );
+});
+
+test("parses esm.sh v-prefix build marks and package subpaths", async () => {
+  const targetPath = await copyFixture("esm-sh-vprefix.html", "index.html");
+  const result = await runCli([targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      htm: "3.1.1",
+      spectacle: "10.2.3",
+      "broadcast-channel": "4.18.0",
+      history: "5.3.5",
+      kbar: "0.1.0-beta.40",
+      "lodash.clonedeep": "4.5.0",
+      "mdast-builder": "1.1.1",
+      "mdast-zone": "4.0.0",
+      "merge-anything": "3.0.3",
+      mousetrap: "1.6.5",
+      "query-string": "7.1.3",
+      react: "19.3.0",
+      "react-dom": "19.3.0",
+      "react-fast-compare": "3.2.0",
+      "react-is": "18.1.0",
+      "react-spring": "9.5.5",
+      "react-swipeable": "7.0.0",
+      "react-syntax-highlighter": "15.5.0",
+      "rehype-raw": "5.1.0",
+      "rehype-react": "6.0.0",
+      "remark-parse": "8.0.3",
+      "remark-rehype": "7.0.0",
+      "styled-components": "5.3.6",
+      "styled-system": "5.1.5",
+      unified: "9.0.0",
+      "unist-util-visit": "2.0.3",
+      "use-resize-observer": "9.0.2",
+    }),
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "htm@^3": "3.0.4",
+      "spectacle@10": "10.2.3",
+      "broadcast-channel@^4.17.0": "4.17.0",
+      "history@^5.3.0": "5.3.0",
+      "react-fast-compare@^3.2.0": "3.2.1",
+      "react-is@^18.1.0": "18.1.0",
+      "react-spring@^9.5.5": "9.5.5",
+      "react-swipeable@^7.0.0": "7.0.0",
+      "react-syntax-highlighter@^15.5.0": "15.5.0",
+      "rehype-raw@^5.1.0": "5.1.0",
+      "rehype-react@^6.0.0": "6.0.0",
+      "remark-parse@^8.0.3": "8.0.3",
+      "remark-rehype@^7.0.0": "7.0.0",
+      "styled-components@^5.3.6": "5.3.6",
+      "unified@^9.0.0": "9.0.0",
+      "unist-util-visit@^2.0.3": "2.0.3",
+      "use-resize-observer@^9.0.2": "9.0.2",
+      "lodash.clonedeep@^4.5.0": "4.5.0",
+      "mdast-builder@^1.1.1": "1.1.1",
+      "mdast-zone@^4.0.0": "4.0.0",
+      "merge-anything@^3.0.3": "3.0.3",
+      "mousetrap@^1.6.5": "1.6.5",
+      "query-string@^7.1.3": "7.1.3",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  assert.doesNotMatch(
+    result.stdout,
+    /Could not parse package identity and version from "https:\/\/esm\.sh\/v121\//,
+  );
+  assert.match(result.stdout, /\n\n## Current\n/);
+  assert.match(
+    result.stdout,
+    /spectacle \(10\)\s+\|\s+10\.2\.3\s+\|\s+10\.2\.3/,
+  );
+  assert.match(result.stdout, /\n\n## Updates\n/);
+  assert.match(result.stdout, /^\s*react\s+\|\s+18\.2\.0\s+\|\s+19\.3\.0/m);
+  assert.match(
+    result.stdout,
+    /react-syntax-highlighter \(\^15\.5\.0\)\s+\|\s+15\.5\.0\s+\|\s+15\.5\.0/,
+  );
+});
+
+test("distinguishes a real v1 package from an esm.sh v-prefix build mark", async () => {
+  // https://www.npmjs.com/package/v1 is a real package. esm.sh build marks
+  // look like /v121/ (a bare v<digits> segment with no @version), while a
+  // real v1 package appears as v1@<version> in the segment. The parser must
+  // not mistake v1@<version> for a build mark just because the package name
+  // starts with v1.
+  const fixtureDir = await createFixtureDir();
+  const targetPath = path.join(fixtureDir, "index.html");
+  await writeFile(
+    targetPath,
+    [
+      '<!doctype html><html><body><script type="importmap">',
+      JSON.stringify(
+        {
+          imports: {
+            v1: "https://esm.sh/v1@1.0.5",
+            "v1/sub": "https://esm.sh/v1@1.0.5/sub",
+            react: "https://esm.sh/v135/react@19.2.3",
+          },
+        },
+        null,
+        2,
+      ),
+      "</script></body></html>",
+    ].join("\n"),
+  );
+  const result = await runCli([targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      v1: "2.0.0",
+      react: "19.3.0",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  // v1@1.0.5 is parsed as package "v1" at version "1.0.5", NOT skipped as a
+  // build mark. It lands in Updates against latest 2.0.0 with no specifier.
+  assert.match(result.stdout, /\n\n## Updates\n/);
+  assert.match(result.stdout, /^\s*v1\s+\|\s+1\.0\.5\s+\|\s+2\.0\.0/m);
+  assert.match(result.stdout, /^\s*react\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0/m);
+  // No unparseable warnings for either the v1 package or the v135 build mark.
+  assert.doesNotMatch(
+    result.stdout,
+    /Could not parse package identity and version from "https:\/\/esm\.sh\/v1@1\.0\.5"/,
+  );
+  assert.doesNotMatch(
+    result.stdout,
+    /Could not parse package identity and version from "https:\/\/esm\.sh\/v135\/react@19\.2\.3"/,
   );
 });
 
@@ -322,7 +613,7 @@ test("--sources enables the Source column", async () => {
   assert.equal(result.code, 0);
   assert.match(
     result.stdout,
-    /Package\s+\|\s+Current\s+\|\s+Latest\s+\|\s+Source/,
+    /Package\s+\|\s+Resolved\s+\|\s+Latest\s+\|\s+Source/,
   );
   assert.match(
     result.stdout,
@@ -361,7 +652,7 @@ test("accepts --width without --sources", async () => {
 
   assert.equal(result.code, 0);
   assert.doesNotMatch(result.stdout, /Source/);
-  assert.match(result.stdout, /Package\s+\|\s+Current\s+\|\s+Latest/);
+  assert.match(result.stdout, /Package\s+\|\s+Resolved\s+\|\s+Latest/);
   assert.equal(result.stderr, "");
 });
 

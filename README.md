@@ -49,10 +49,10 @@ $ esm-check-updates
 Target: ./public/index.html
 
 ## Updates
-Package    Current  Latest
----------  -------  ------
-react      19.2.3   19.3.0
-react-dom  19.2.3   19.3.0
+Package    Resolved  Latest
+---------  --------  ------
+react      19.2.3    19.3.0
+react-dom  19.2.3    19.3.0
 
 ## Warnings
 - ./public/index.html contains `scopes`, which are not yet supported.

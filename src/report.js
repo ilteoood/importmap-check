@@ -64,19 +64,19 @@ const formatVersionSegment = (version, index, colorEnabled) => {
     .join(".");
 };
 
-const formatLatestVersion = (currentVersions, latestVersion, colorEnabled) => {
-  if (currentVersions.length !== 1) {
+const formatLatestVersion = (resolvedVersions, latestVersion, colorEnabled) => {
+  if (resolvedVersions.length !== 1) {
     return latestVersion;
   }
 
-  const currentParts = currentVersions[0]
+  const resolvedParts = resolvedVersions[0]
     .split(".")
     .map((part) => Number.parseInt(part, 10) || 0);
   const latestParts = latestVersion
     .split(".")
     .map((part) => Number.parseInt(part, 10) || 0);
   const changedIndex = latestParts.findIndex((part, index) => {
-    return part !== (currentParts[index] ?? 0);
+    return part !== (resolvedParts[index] ?? 0);
   });
 
   if (changedIndex === -1) {
@@ -136,6 +136,7 @@ const getSeverityColor = (severity) => {
 const FALLBACK_WIDTH = 120;
 const MIN_SOURCE_WIDTH = 20;
 const SOURCE_CONTINUATION_INDENT = 2;
+const DELIMITER_VISIBLE_WIDTH = 3;
 
 const resolveAvailableWidth = (options) => {
   if (typeof options.width === "number") {
@@ -249,23 +250,27 @@ const createContinuationPrefix = (widths, colorEnabled) => {
 
 const renderPackageRow = (result, widths, colorEnabled) => {
   const {
-    currentWidth,
     latestWidth,
     packageWidth,
+    resolvedWidth,
     sourceWidth,
     sourcesEnabled,
   } = widths;
+  const specifierSuffix =
+    result.specifiers && result.specifiers.length > 0
+      ? ` (${result.specifiers.join(", ")})`
+      : "";
   const packageText = result.severity
-    ? colorize(
+    ? `${colorize(
         result.packageName,
         getSeverityColor(result.severity),
         colorEnabled,
-      )
-    : result.packageName;
-  const currentText = result.currentVersions.join(", ");
+      )}${specifierSuffix}`
+    : `${result.packageName}${specifierSuffix}`;
+  const resolvedText = result.resolvedVersions.join(", ");
   const latestText = result.hasUpdate
     ? formatLatestVersion(
-        result.currentVersions,
+        result.resolvedVersions,
         result.latestVersion,
         colorEnabled,
       )
@@ -276,7 +281,7 @@ const renderPackageRow = (result, widths, colorEnabled) => {
       createTableRow(
         [
           { text: packageText, width: packageWidth },
-          { text: currentText, width: currentWidth },
+          { text: resolvedText, width: resolvedWidth },
           { text: latestText, width: latestWidth },
         ],
         colorEnabled,
@@ -299,7 +304,7 @@ const renderPackageRow = (result, widths, colorEnabled) => {
         createTableRow(
           [
             { text: packageText, width: packageWidth },
-            { text: currentText, width: currentWidth },
+            { text: resolvedText, width: resolvedWidth },
             { text: latestText, width: latestWidth },
             { text: sourceLine, width: sourceWidth },
           ],
@@ -308,7 +313,7 @@ const renderPackageRow = (result, widths, colorEnabled) => {
       );
     } else {
       lines.push(
-        `${createContinuationPrefix([packageWidth, currentWidth, latestWidth], colorEnabled)}${colorize(" | ", "gray", colorEnabled)}${sourceLine}`,
+        `${createContinuationPrefix([packageWidth, resolvedWidth, latestWidth], colorEnabled)}${colorize(" | ", "gray", colorEnabled)}${sourceLine}`,
       );
     }
   }
@@ -320,13 +325,13 @@ const renderTableSection = (results, widths, colorEnabled) => {
   const columnNames = widths.sourcesEnabled
     ? [
         { text: "Package", width: widths.packageWidth },
-        { text: "Current", width: widths.currentWidth },
+        { text: "Resolved", width: widths.resolvedWidth },
         { text: "Latest", width: widths.latestWidth },
         { text: "Source", width: widths.sourceWidth },
       ]
     : [
         { text: "Package", width: widths.packageWidth },
-        { text: "Current", width: widths.currentWidth },
+        { text: "Resolved", width: widths.resolvedWidth },
         { text: "Latest", width: widths.latestWidth },
       ];
 
@@ -339,14 +344,23 @@ const renderTableSection = (results, widths, colorEnabled) => {
   return sectionLines;
 };
 
+const packageDisplayLength = (result) => {
+  const specifierSuffix =
+    result.specifiers && result.specifiers.length > 0
+      ? ` (${result.specifiers.join(", ")})`
+      : "";
+
+  return `${result.packageName}${specifierSuffix}`.length;
+};
+
 const computeSectionWidths = (results, sourcesEnabled, availableWidth) => {
   const packageWidth = Math.max(
-    ...results.map((result) => result.packageName.length),
+    ...results.map((result) => packageDisplayLength(result)),
     "Package".length,
   );
-  const currentWidth = Math.max(
-    ...results.map((result) => result.currentVersions.join(", ").length),
-    "Current".length,
+  const resolvedWidth = Math.max(
+    ...results.map((result) => result.resolvedVersions.join(", ").length),
+    "Resolved".length,
   );
   const latestWidth = Math.max(
     ...results.map((result) => result.latestVersion.length),
@@ -354,18 +368,17 @@ const computeSectionWidths = (results, sourcesEnabled, availableWidth) => {
   );
 
   if (!sourcesEnabled || results.length === 0) {
-    return { currentWidth, latestWidth, packageWidth, sourcesEnabled };
+    return { latestWidth, packageWidth, resolvedWidth, sourcesEnabled };
   }
 
-  const delimiterWidth = 3;
   const usedWidth =
-    packageWidth + currentWidth + latestWidth + delimiterWidth * 3;
+    packageWidth + resolvedWidth + latestWidth + DELIMITER_VISIBLE_WIDTH * 3;
   const sourceWidth = Math.max(MIN_SOURCE_WIDTH, availableWidth - usedWidth);
 
   return {
-    currentWidth,
     latestWidth,
     packageWidth,
+    resolvedWidth,
     sourceWidth,
     sourcesEnabled,
   };

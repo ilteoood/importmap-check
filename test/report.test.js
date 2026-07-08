@@ -27,7 +27,7 @@ test("default report without sources is byte-identical to three-column output", 
   });
   const output = formatReport(report, { colorEnabled: false });
 
-  assert.match(output, /Package\s+\|\s+Current\s+\|\s+Latest/);
+  assert.match(output, /Package\s+\|\s+Resolved\s+\|\s+Latest/);
   assert.doesNotMatch(output, /\|\s+Source/);
   assert.match(output, /react\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0/);
   assert.match(output, /react-dom\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0/);
@@ -44,7 +44,7 @@ test("sources column renders inline when labels fit", async () => {
     width: 200,
   });
 
-  assert.match(output, /Package\s+\|\s+Current\s+\|\s+Latest\s+\|\s+Source/);
+  assert.match(output, /Package\s+\|\s+Resolved\s+\|\s+Latest\s+\|\s+Source/);
   assert.match(
     output,
     /react\s+\|\s+19\.2\.3\s+\|\s+19\.3\.0\s+\|\s+react \(jsdelivr\)/,
@@ -65,7 +65,7 @@ test("sources column wraps with hanging indent when labels overflow", async () =
     width: 100,
   });
 
-  assert.match(output, /Package\s+\|\s+Current\s+\|\s+Latest\s+\|\s+Source/);
+  assert.match(output, /Package\s+\|\s+Resolved\s+\|\s+Latest\s+\|\s+Source/);
   // Each source label appears on its own line when the joined form overflows.
   assert.match(output, /\.\/vendor\/react\.js \(esm\.sh\)/);
   assert.match(
@@ -73,7 +73,7 @@ test("sources column wraps with hanging indent when labels overflow", async () =
     /https:\/\/cdn\.jsdelivr\.net\/npm\/react@19\.0\.0\/ \(jsdelivr\)/,
   );
   assert.match(output, /react\/ \(jsdelivr\)/);
-  // Continuation lines blank the first three columns (no Package/Current/Latest content).
+  // Continuation lines blank the first three columns (no Package/Resolved/Latest content).
   const continuationLines = output
     .split("\n")
     .filter((line) => /^\s+\|\s+\|\s+\|/.test(line));
@@ -88,13 +88,15 @@ test("sources column wraps with hanging indent when labels overflow", async () =
 test("long single-token source labels chunk-wrap with a deeper hanging indent", async () => {
   // This fixture's source label has no internal spaces; the wrap path breaks
   // the token at the source column width and indents continuation chunks.
+  // Width 61 (not 60) keeps the source column at 31 chars after the v1 column
+  // header was renamed Current -> Resolved (one character wider).
   const report = await analyzeWithSources("long-source-key.html", {
     react: "19.3.0",
   });
   const output = formatReport(report, {
     colorEnabled: false,
     sourcesEnabled: true,
-    width: 60,
+    width: 61,
   });
 
   assert.match(output, /https:\/\/cdn\.example\.com\/very\/lo/);

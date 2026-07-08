@@ -2,6 +2,35 @@
 
 ## MODIFIED Requirements
 
+### Requirement: Package Identity Extraction
+The system SHALL extract a package identity from supported CDN-backed mappings when possible.
+
+#### Scenario: bare package mapping is parseable
+- **WHEN** an entry maps a bare specifier such as `react` to a supported CDN URL with a parseable package and version
+- **THEN** the system identifies the package represented by that entry
+
+#### Scenario: package subpath mapping is parseable
+- **WHEN** an entry maps a package subpath such as `react/jsx-runtime` to a supported CDN URL with a parseable package and version
+- **THEN** the system identifies the underlying package represented by that entry
+
+#### Scenario: package-prefix mapping is parseable
+- **WHEN** an entry maps a package-prefix specifier such as `react/` to a supported CDN URL with a parseable package and version
+- **THEN** the system identifies the underlying package represented by that entry
+
+#### Scenario: remap-style key points to a parseable CDN destination
+- **WHEN** an entry uses a URL-like or path-like remap key and its destination value is a supported CDN URL with a parseable package and version
+- **THEN** the system identifies the package from the destination value alone
+- **AND** the system does not infer the package identity from the remap-style key itself
+
+#### Scenario: esm.sh build-mark prefix is present
+- **WHEN** an `esm.sh` URL includes a `/v<digits>/` build-mark prefix segment such as `https://esm.sh/v121/react@18.2.0`
+- **THEN** the system skips the build-mark prefix segment and extracts the package identity from the subsequent path segment
+- **AND** the system does not treat the build-mark prefix as a package name
+
+#### Scenario: esm.sh URL includes a subpath after the package version
+- **WHEN** an `esm.sh` URL includes a subpath after the package version segment such as `https://esm.sh/react@18.2.0/jsx-runtime`
+- **THEN** the system extracts the package identity from the `<package>@<version>` segment and ignores the trailing subpath for package identity purposes
+
 ### Requirement: Pinned Version Extraction
 The system SHALL extract a concrete pinned package version from supported CDN-backed mappings for use as the current version in update analysis.
 

@@ -184,6 +184,24 @@ const tryParseUrl = (value) => {
     return null;
   }
 };
+const PINNED_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+const SEMVER_RANGE_PATTERN = /^[~^]\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?$/;
+const MAJOR_SELECTOR_PATTERN = /^\d+$/;
+const MINOR_SELECTOR_PATTERN = /^\d+\.\d+$/;
+// npm dist-tags are arbitrary strings (e.g. `latest`, `beta`, `preview`,
+// `insider`, `canary-minor`). We accept any token of word characters, dots,
+// and dashes as a potential specifier and let the registry resolve it.
+// Reference: https://docs.npmjs.com/cli/v9/commands/npm-dist-tag
+const SPECIFIER_TOKEN_PATTERN = /^[~^]?[\w.+-]+$/;
+
+const isResolvedSpecifier = (token) => {
+  return (
+    SEMVER_RANGE_PATTERN.test(token) ||
+    MAJOR_SELECTOR_PATTERN.test(token) ||
+    MINOR_SELECTOR_PATTERN.test(token) ||
+    SPECIFIER_TOKEN_PATTERN.test(token)
+  );
+};
 
 const extractVersionedPackage = (firstSegment, scopeSegment = null) => {
   const versionSeparatorIndex = firstSegment.lastIndexOf("@");
@@ -195,17 +213,29 @@ const extractVersionedPackage = (firstSegment, scopeSegment = null) => {
   const packageName = scopeSegment
     ? `${scopeSegment}/${firstSegment.slice(0, versionSeparatorIndex)}`
     : firstSegment.slice(0, versionSeparatorIndex);
-  const currentVersion = firstSegment.slice(versionSeparatorIndex + 1);
+  let versionToken;
 
-  if (!packageName || !currentVersion) {
+  try {
+    versionToken = decodeURIComponent(
+      firstSegment.slice(versionSeparatorIndex + 1),
+    );
+  } catch {
     return null;
   }
 
-  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(currentVersion)) {
+  if (!packageName || !versionToken) {
     return null;
   }
 
-  return { currentVersion, packageName, specifier: "" };
+  if (PINNED_VERSION_PATTERN.test(versionToken)) {
+    return { currentVersion: versionToken, packageName, specifier: "" };
+  }
+
+  if (isResolvedSpecifier(versionToken)) {
+    return { currentVersion: null, packageName, specifier: versionToken };
+  }
+
+  return null;
 };
 
 const parseJsdelivrPackage = (parsedUrl) => {
@@ -229,21 +259,41 @@ const parseJsdelivrPackage = (parsedUrl) => {
 
 const parseEsmShPackage = (parsedUrl) => {
   // esm.sh package URL shapes are documented at https://esm.sh/
+  // Supported shapes include:
+  //   - https://esm.sh/<pkg>@<version>
+  //   - https://esm.sh/<pkg>@<version>/<subpath>
+  //   - https://esm.sh/v<digits>/<pkg>@<version>/<subpath>  (build-mark prefix)
+  //   - https://esm.sh/@scope/<pkg>@<version>/<subpath>
+  //   - https://esm.sh/v<digits>/@scope/<pkg>@<version>/<subpath>
   const segments = parsedUrl.pathname.split("/").filter(Boolean);
 
   if (segments.length === 0) {
     return null;
   }
 
-  if (segments[0].startsWith("@")) {
-    if (segments.length < 2) {
+  let startIndex = 0;
+
+  // esm.sh emits a "/v<digits>/" build-mark prefix for pinned build-line URLs.
+  if (/^v\d+$/.test(segments[0])) {
+    startIndex = 1;
+  }
+
+  if (segments.length <= startIndex) {
+    return null;
+  }
+
+  if (segments[startIndex].startsWith("@")) {
+    if (segments.length <= startIndex + 1) {
       return null;
     }
 
-    return extractVersionedPackage(segments[1], segments[0]);
+    return extractVersionedPackage(
+      segments[startIndex + 1],
+      segments[startIndex],
+    );
   }
 
-  return extractVersionedPackage(segments[0]);
+  return extractVersionedPackage(segments[startIndex]);
 };
 
 const parseSupportedPackageFromUrl = (value) => {
@@ -315,10 +365,6 @@ const parseDependencyPins = (value) => {
     });
 };
 
-const deriveSpecifier = (version) => {
-  return version ?? "";
-};
-
 const buildCdnSpec = (cdnFamily, specifier) => {
   return specifier ? `${cdnFamily}@${specifier}` : cdnFamily;
 };
@@ -337,43 +383,36 @@ const collectPackageOccurrences = (entries) => {
   for (const entry of entries) {
     const parsed = parseSupportedPackageFromUrl(entry.value);
 
-    if (!parsed) {
-      continue;
+    if (parsed) {
+      if (parsed?.packageName) {
+        occurrences.push({
+          cdnFamily: parsed.cdnFamily,
+          currentVersion: parsed.currentVersion,
+          destinationUrl: entry.value,
+          importMapIndex: entry.importMapIndex,
+          integrity: entry.integrity,
+          key: entry.key,
+          keyKind: entry.keyKind,
+          packageName: parsed.packageName,
+          sourcePath: entry.sourcePath,
+          specifier: parsed.specifier ?? "",
+        });
+      } else {
+        warnings.push({
+          type: "unparseable-entry",
+          message: `Could not parse package identity and version from ${JSON.stringify(entry.value)} for key ${JSON.stringify(entry.key)}.`,
+        });
+      }
     }
-
-    if (!parsed?.packageName || !parsed.currentVersion) {
-      warnings.push({
-        type: "unparseable-entry",
-        message: `Could not parse package identity and version from ${JSON.stringify(entry.value)} for key ${JSON.stringify(entry.key)}.`,
-      });
-      continue;
-    }
-
-    const specifier = deriveSpecifier(parsed.specifier);
-
-    occurrences.push({
-      cdnFamily: parsed.cdnFamily,
-      currentVersion: parsed.currentVersion,
-      destinationUrl: entry.value,
-      importMapIndex: entry.importMapIndex,
-      integrity: entry.integrity,
-      key: entry.key,
-      keyKind: entry.keyKind,
-      packageName: parsed.packageName,
-      sourcePath: entry.sourcePath,
-      specifier,
-    });
 
     for (const dependencyPin of parseDependencyPins(entry.value)) {
-      if (!dependencyPin?.packageName || !dependencyPin.currentVersion) {
+      if (!dependencyPin?.packageName) {
         warnings.push({
           type: "unparseable-entry",
           message: `Could not parse a pinned dependency from esm.sh deps query on ${JSON.stringify(entry.value)}.`,
         });
         continue;
       }
-
-      const depSpecifier = deriveSpecifier(dependencyPin.specifier);
 
       occurrences.push({
         cdnFamily: "esm.sh",
@@ -385,7 +424,7 @@ const collectPackageOccurrences = (entries) => {
         keyKind: entry.keyKind,
         packageName: dependencyPin.packageName,
         sourcePath: entry.sourcePath,
-        specifier: depSpecifier,
+        specifier: dependencyPin.specifier ?? "",
       });
     }
   }
@@ -483,6 +522,170 @@ const defaultResolveLatestVersion = async (packageName) => {
   return latestVersion;
 };
 
+const isStableVersion = (version) => !version.includes("-");
+
+const listStableVersions = (registryBody) => {
+  const versions = Object.keys(registryBody?.versions ?? {});
+
+  return versions.filter(isStableVersion);
+};
+
+const findHighestInMajor = (versions, major) => {
+  return versions
+    .filter((version) => version.split(".")[0] === major)
+    .sort(compareVersions)
+    .pop();
+};
+
+const findHighestInMinor = (versions, major, minor) => {
+  return versions
+    .filter((version) => {
+      const [maj, min] = version.split(".");
+
+      return maj === major && min === minor;
+    })
+    .sort(compareVersions)
+    .pop();
+};
+
+const resolveDistTag = (packageName, specifier, registryBody) => {
+  const distTags = registryBody?.["dist-tags"] ?? {};
+
+  return distTags[specifier] ?? null;
+};
+
+const resolveSemverRange = (packageName, specifier, registryBody) => {
+  const versions = listStableVersions(registryBody);
+
+  if (specifier.startsWith("^")) {
+    const major = specifier.slice(1).split(".")[0];
+
+    return major ? (findHighestInMajor(versions, major) ?? null) : null;
+  }
+
+  if (specifier.startsWith("~")) {
+    const [major, minor] = specifier.slice(1).split(".");
+
+    if (!major) {
+      return null;
+    }
+
+    if (!minor) {
+      return findHighestInMajor(versions, major) ?? null;
+    }
+
+    return findHighestInMinor(versions, major, minor) ?? null;
+  }
+
+  if (MAJOR_SELECTOR_PATTERN.test(specifier)) {
+    return findHighestInMajor(versions, specifier) ?? null;
+  }
+
+  if (MINOR_SELECTOR_PATTERN.test(specifier)) {
+    const [major, minor] = specifier.split(".");
+
+    return findHighestInMinor(versions, major, minor) ?? null;
+  }
+
+  return null;
+};
+
+const parseSpecifierOverrides = () => {
+  const raw = process.env.ECU_TEST_SPECIFIER_VERSIONS;
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    return isObjectRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const defaultResolveSpecifier = async (packageName, specifier) => {
+  const overrides = parseSpecifierOverrides();
+  const overrideKey = `${packageName}@${specifier}`;
+
+  if (overrides && typeof overrides[overrideKey] === "string") {
+    return overrides[overrideKey];
+  }
+
+  const encodedPackage = packageName
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const response = await fetch(`https://registry.npmjs.org/${encodedPackage}`);
+
+  if (!response.ok) {
+    throw new Error(`npm registry request failed with ${response.status}`);
+  }
+
+  const body = await response.json();
+
+  // Try dist-tag lookup first (covers arbitrary tag names), then fall back to
+  // semver-range/major/minor selector resolution. Returns null when neither
+  // path resolves so the caller can warn.
+  const distTagVersion = resolveDistTag(packageName, specifier, body);
+
+  if (distTagVersion) {
+    return distTagVersion;
+  }
+
+  return resolveSemverRange(packageName, specifier, body);
+};
+
+const resolveOccurrenceSpecifiers = async (
+  occurrences,
+  warnings,
+  resolveSpecifier,
+) => {
+  const resolved = [];
+
+  for (const occurrence of occurrences) {
+    if (occurrence.currentVersion) {
+      resolved.push(occurrence);
+      continue;
+    }
+
+    if (!occurrence.specifier) {
+      warnings.push({
+        type: "unparseable-entry",
+        message: `Could not parse package identity and version from ${JSON.stringify(occurrence.destinationUrl)} for key ${JSON.stringify(occurrence.key)}.`,
+      });
+      continue;
+    }
+
+    try {
+      const resolvedVersion = await resolveSpecifier(
+        occurrence.packageName,
+        occurrence.specifier,
+      );
+
+      if (!resolvedVersion) {
+        warnings.push({
+          type: "unparseable-entry",
+          message: `Could not resolve specifier ${JSON.stringify(occurrence.specifier)} for package ${occurrence.packageName} from ${JSON.stringify(occurrence.destinationUrl)}.`,
+        });
+        continue;
+      }
+
+      occurrence.currentVersion = resolvedVersion;
+      resolved.push(occurrence);
+    } catch (error) {
+      warnings.push({
+        type: "unparseable-entry",
+        message: `Could not resolve specifier ${JSON.stringify(occurrence.specifier)} for package ${occurrence.packageName} from ${JSON.stringify(occurrence.destinationUrl)}: ${error.message}`,
+      });
+    }
+  }
+
+  return resolved;
+};
+
 const groupByPackage = (occurrences) => {
   const grouped = new Map();
 
@@ -551,6 +754,7 @@ const buildPackageSources = (occurrences) => {
 export const analyzeTarget = async (targetPath, options = {}) => {
   const resolveLatestVersion =
     options.resolveLatestVersion ?? defaultResolveLatestVersion;
+  const resolveSpecifier = options.resolveSpecifier ?? defaultResolveSpecifier;
   const withSources = options.withSources ?? false;
   const importMaps = await loadImportMaps(targetPath);
   const { normalizedEntries, warnings: normalizationWarnings } =
@@ -558,7 +762,13 @@ export const analyzeTarget = async (targetPath, options = {}) => {
   const { occurrences, warnings: parseWarnings } =
     collectPackageOccurrences(normalizedEntries);
 
-  const groupedPackages = groupByPackage(occurrences);
+  const resolvedOccurrences = await resolveOccurrenceSpecifiers(
+    occurrences,
+    parseWarnings,
+    resolveSpecifier,
+  );
+
+  const groupedPackages = groupByPackage(resolvedOccurrences);
   const lookupFailures = [];
   const notes = [];
   const packageResults = [];
@@ -567,6 +777,13 @@ export const analyzeTarget = async (targetPath, options = {}) => {
     const currentVersions = [
       ...new Set(packageGroup.occurrences.map((item) => item.currentVersion)),
     ].sort(compareVersions);
+    const specifiers = [
+      ...new Set(
+        packageGroup.occurrences
+          .map((item) => item.specifier)
+          .filter((specifier) => typeof specifier === "string" && specifier),
+      ),
+    ].sort();
 
     let latestVersion;
 
@@ -607,13 +824,14 @@ export const analyzeTarget = async (targetPath, options = {}) => {
     }
 
     const result = {
-      currentVersions,
+      resolvedVersions: currentVersions,
       hasUpdate,
       latestVersion,
       packageName: packageGroup.packageName,
       severity: hasUpdate
         ? determineSeverity(currentVersions[0], latestVersion)
         : null,
+      specifiers,
     };
 
     if (withSources) {

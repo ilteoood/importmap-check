@@ -156,7 +156,6 @@ const main = async (argv = process.argv.slice(2)) => {
   });
   writeStdout(
     formatReport(report, {
-      colorEnabled: undefined,
       sourcesEnabled: parsed.sources,
       width: parsed.width,
     }),
