@@ -458,3 +458,140 @@ export const formatReport = (report, options = {}) => {
 
   return lines.join("\n");
 };
+
+const formatRewrittenRow = (rewrite, colorEnabled) => {
+  const specSuffix = rewrite.oldSpecifier ? ` ${rewrite.oldSpecifier}` : "";
+  const packageLabel = `${rewrite.packageName}${specSuffix}`;
+  const before = rewrite.oldSpecifier || rewrite.currentVersion;
+  const after = rewrite.newSpecifier;
+  const arrow = colorEnabled ? "\u001b[36m\u2192\u001b[0m" : "\u2192";
+
+  return `  ${packageLabel}  ${before} ${arrow} ${after}`;
+};
+
+const dedupeRewritesByNameAndSpecifier = (rewrites) => {
+  // Multiple occurrences of the same package with the same specifier produce
+  // identical before/after rows. The post-rewrite summary should list each
+  // unique transformation once, sorted by package name.
+  const seen = new Set();
+  const deduped = [];
+
+  for (const rewrite of rewrites) {
+    const key = `${rewrite.packageName}\0${rewrite.oldSpecifier}\0${rewrite.newSpecifier}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(rewrite);
+  }
+
+  deduped.sort((left, right) =>
+    left.packageName.localeCompare(right.packageName),
+  );
+
+  return deduped;
+};
+
+export const formatUpdateSummary = (rewrite, report, options = {}) => {
+  const colorEnabled =
+    options.colorEnabled ??
+    (Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined);
+
+  if (rewrite.noChanges) {
+    // No entries were rewritten, but analyzer notes/warnings (e.g. dist-tag
+    // floating notices, destination-skew, unparseable entries) still need to
+    // surface so the user knows what the analyzer saw.
+    const lines = ["No changes to write."];
+
+    if (report.warnings.length > 0) {
+      appendSection(
+        lines,
+        "Warnings",
+        report.warnings.map((warning) => `- ${warning.message}`),
+        colorEnabled,
+      );
+    }
+
+    if (rewrite.lookupFailures.length > 0) {
+      appendSection(
+        lines,
+        "Lookup Failures",
+        rewrite.lookupFailures.map((failure) => `- ${failure.message}`),
+        colorEnabled,
+      );
+    }
+
+    if (rewrite.notes.length > 0) {
+      appendSection(
+        lines,
+        "Notes",
+        rewrite.notes.map((note) => `- ${note.message}`),
+        colorEnabled,
+      );
+    }
+
+    return lines.join("\n");
+  }
+
+  const lines = [`Updated ${rewrite.targetPath}:`, ""];
+
+  const deduped = dedupeRewritesByNameAndSpecifier(rewrite.rewrites);
+
+  for (const entry of deduped) {
+    lines.push(formatRewrittenRow(entry, colorEnabled));
+  }
+
+  // The rewrite path appends stripped-integrity warnings to `rewrite.warnings`
+  // (so they still show up in the aggregate list), but the summary breaks them
+  // out into a dedicated `Stripped integrity entries` subsection below. Filter
+  // them out of the top-level Warnings section to avoid double-listing.
+  const analyzerWarnings = report.warnings.filter((warning) => {
+    return !(
+      warning.type === "integrity-strip" ||
+      (typeof warning.message === "string" &&
+        warning.message.startsWith("Stripped integrity entry for"))
+    );
+  });
+
+  if (analyzerWarnings.length > 0) {
+    appendSection(
+      lines,
+      "Warnings",
+      analyzerWarnings.map((warning) => `- ${warning.message}`),
+      colorEnabled,
+    );
+  }
+
+  if (rewrite.lookupFailures.length > 0) {
+    appendSection(
+      lines,
+      "Lookup Failures",
+      rewrite.lookupFailures.map((failure) => `- ${failure.message}`),
+      colorEnabled,
+    );
+  }
+
+  if (rewrite.strippedIntegrityEntries.length > 0) {
+    appendSection(
+      lines,
+      "Stripped integrity entries",
+      rewrite.strippedIntegrityEntries.map(
+        (entry) => `- ${entry.url} (triggered by ${entry.packageName})`,
+      ),
+      colorEnabled,
+    );
+  }
+
+  if (rewrite.notes.length > 0) {
+    appendSection(
+      lines,
+      "Notes",
+      rewrite.notes.map((note) => `- ${note.message}`),
+      colorEnabled,
+    );
+  }
+
+  return lines.join("\n");
+};

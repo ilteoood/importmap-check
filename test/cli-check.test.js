@@ -1,71 +1,13 @@
-import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 
-const repoRoot = path.resolve(import.meta.dirname, "..");
-const fixturesRoot = path.join(import.meta.dirname, "fixtures");
+import { createFixtureRegistry, runCli } from "./cli-helpers.js";
 
-const fixtures = [];
+const { cleanup, copyFixture, createFixtureDir } = createFixtureRegistry();
 
-const createFixtureDir = async () => {
-  const fixtureDir = await mkdtemp(path.join(os.tmpdir(), "ecu-cli-"));
-  fixtures.push(fixtureDir);
-
-  return fixtureDir;
-};
-
-const copyFixture = async (fixtureName, targetName = fixtureName) => {
-  const fixtureDir = await createFixtureDir();
-  const targetPath = path.join(fixtureDir, targetName);
-  await copyFile(path.join(fixturesRoot, fixtureName), targetPath);
-
-  return targetPath;
-};
-
-after(async () => {
-  await Promise.all(
-    fixtures.map(async (fixtureDir) => {
-      await rm(fixtureDir, { force: true, recursive: true });
-    }),
-  );
-});
-
-const runCli = async (args, env = {}) => {
-  return await new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      ["bin/esm-check-updates.js", ...args],
-      {
-        cwd: repoRoot,
-        env: {
-          ...process.env,
-          ECU_TEST_LATEST_VERSIONS: JSON.stringify({
-            react: "19.3.0",
-            "react-dom": "19.3.0",
-          }),
-          ...env,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      resolve({ code, stderr, stdout });
-    });
-  });
-};
+after(cleanup);
 
 test("prints help with --help", async () => {
   const result = await runCli(["--help"]);
@@ -83,6 +25,10 @@ test("prints help with --help", async () => {
   assert.match(
     result.stdout,
     /--width <num>\s+Override available report width/,
+  );
+  assert.match(
+    result.stdout,
+    /-u, --update\s+Rewrite updateable entries in the target file in place/,
   );
   assert.equal(result.stderr, "");
 });
@@ -127,11 +73,19 @@ test("rejects flag=value syntax as an unknown flag", async () => {
   assert.equal(result.stdout, "");
 });
 
-test("rejects unsupported update flag", async () => {
+test("rejects --update without a target path", async () => {
   const result = await runCli(["--update"]);
 
   assert.equal(result.code, 1);
-  assert.match(result.stderr, /Update mode is not available in v1/);
+  assert.match(result.stderr, /Expected exactly one target path/);
+  assert.equal(result.stdout, "");
+});
+
+test("rejects -u with multiple target paths", async () => {
+  const result = await runCli(["-u", "one.json", "two.json"]);
+
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Expected exactly one target path/);
   assert.equal(result.stdout, "");
 });
 

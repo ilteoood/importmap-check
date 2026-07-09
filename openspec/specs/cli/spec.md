@@ -59,20 +59,34 @@ The system SHALL support `--version` and `-v` as version flags.
 - **AND** the system does not require a target path
 - **AND** the system returns exit code `0`
 
-### Requirement: Unsupported Update Flags In V1
-The system SHALL reject `--update` and `-u` in v1 as unsupported options.
+### Requirement: Update Flag Arity And Mode Selection
 
-#### Scenario: Long update flag is provided
-- **WHEN** the user runs the command with `--update`
-- **THEN** the system reports that update mode is not available in v1
+The system SHALL accept `--update` / `-u` as a supported flag that selects update-rewrite mode and requires exactly one positional target path.
+
+#### Scenario: Update flag is provided with exactly one target path
+- **WHEN** the user runs the command with `--update` (or `-u`) and exactly one positional target path
+- **THEN** the system proceeds in update-rewrite mode
+- **AND** the system analyzes the target, rewrites updateable entries, and writes the file atomically
+- **AND** the system prints the post-rewrite summary to `stdout`
+- **AND** the system returns exit code `0` on success
+
+#### Scenario: Update flag is provided without a target path
+- **WHEN** the user runs the command with `--update` and no positional target path
+- **THEN** the system rejects the invocation as invalid
 - **AND** the system writes the error to `stderr`
 - **AND** the system returns a non-zero exit code
 
-#### Scenario: Short update flag is provided
-- **WHEN** the user runs the command with `-u`
-- **THEN** the system reports that update mode is not available in v1
+#### Scenario: Update flag is provided with multiple target paths
+- **WHEN** the user runs the command with `--update` and more than one positional target path
+- **THEN** the system rejects the invocation as invalid
 - **AND** the system writes the error to `stderr`
 - **AND** the system returns a non-zero exit code
+
+#### Scenario: Update flag coexists with sources or width flags
+- **WHEN** the user runs the command with `--update --sources <target-path>` (with or without `--width`)
+- **THEN** the system accepts the combination
+- **AND** the system performs the update-rewrite
+- **AND** the post-rewrite summary respects the `--sources` rendering rules
 
 ### Requirement: Unknown Flag Handling
 The system SHALL reject unsupported CLI flags in v1.
@@ -156,15 +170,16 @@ The system SHALL treat update findings as a successful execution result.
 - **THEN** the system returns a non-zero exit code
 
 ### Requirement: Help Output Content
-The system SHALL provide concise help text for the supported v1 command surface, including the optional `--sources` and `--width <number>` flags.
+The system SHALL provide concise help text for the supported command surface, including the optional `--sources` and `--width <number>` flags and the supported `--update` / `-u` flag.
 
 #### Scenario: Help output is printed
 - **WHEN** the system prints command help
 - **THEN** the help text includes the expected positional target argument
 - **AND** the help text describes supported target types at a high level
-- **AND** the help text states or implies that v1 is check-only
+- **AND** the help text states or implies that the default invocation is check-only
 - **AND** the help text lists `--sources` with a description indicating it shows source entries in the report
 - **AND** the help text lists `--width <number>` with a description indicating it overrides the available report width (used with `--sources`)
+- **AND** the help text lists `--update` / `-u` with a description indicating it rewrites updateable entries in the target file in place
 
 ### Requirement: Built-In CLI Implementation
 The CLI implementation SHALL rely on Node.js built-ins for argument parsing and command dispatch in v1.

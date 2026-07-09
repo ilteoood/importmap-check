@@ -4,8 +4,12 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 
 import packageJson from "../package.json" with { type: "json" };
-import { analyzeTarget } from "../src/index.js";
-import { formatReport } from "../src/report.js";
+import {
+  analyzeTarget,
+  formatReport,
+  formatUpdateSummary,
+  rewriteTargetInPlace,
+} from "../src/index.js";
 
 const HELP_FLAGS = new Set(["--help", "-h"]);
 const VERSION_FLAGS = new Set(["--version", "-v"]);
@@ -34,21 +38,23 @@ const formatHelp = () => {
   return [
     "Usage: esm-check-updates [options] <target-path>",
     "",
-    "Check-only v1 CLI for import map JSON and HTML files with inline import maps.",
-    "This mode is non-destructive and does not update files.",
+    "Check-only CLI for import map JSON and HTML files with inline import maps.",
+    "The default invocation is non-destructive and reports available updates.",
+    "Use --update to rewrite updateable entries in place.",
     "",
     "Options:",
     "  -h, --help          Show help",
     "  -v, --version       Show version",
     "      --sources       Show source import-map entries in the report",
     "      --width <num>   Override available report width (used with --sources)",
-    "  -u, --update        Unsupported in v1",
+    "  -u, --update        Rewrite updateable entries in the target file in place",
   ].join("\n");
 };
 
 const parseArgs = (argv) => {
   const positional = [];
   let sources = false;
+  let update = false;
   let width;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -63,7 +69,8 @@ const parseArgs = (argv) => {
     }
 
     if (UPDATE_FLAGS.has(arg)) {
-      throw createError("Update mode is not available in v1.");
+      update = true;
+      continue;
     }
 
     if (arg === SOURCES_FLAG) {
@@ -111,7 +118,7 @@ const parseArgs = (argv) => {
   }
 
   return {
-    mode: "check",
+    mode: update ? "update" : "check",
     sources,
     targetPath: positional[0],
     width,
@@ -154,6 +161,20 @@ const main = async (argv = process.argv.slice(2)) => {
   const report = await analyzeTarget(parsed.targetPath, {
     withSources: parsed.sources,
   });
+
+  if (parsed.mode === "update") {
+    const rewrite = await rewriteTargetInPlace(parsed.targetPath, report);
+
+    writeStdout(
+      formatUpdateSummary(rewrite, report, {
+        sourcesEnabled: parsed.sources,
+        width: parsed.width,
+      }),
+    );
+
+    return 0;
+  }
+
   writeStdout(
     formatReport(report, {
       sourcesEnabled: parsed.sources,
