@@ -53,6 +53,12 @@ const collectPackageOccurrences = (entries) => {
         cdnFamily: "esm.sh",
         currentVersion: dependencyPin.currentVersion,
         destinationUrl: entry.value,
+        // `fromDepsQuery` marks this occurrence as sourced from the outer
+        // URL's `?deps=` query pin (not the outer package itself). The
+        // rewrite path uses this to skip these occurrences: `?deps=` rewrite
+        // is deferred to a follow-up change, and the outer URL's `@` slot is
+        // the outer package's version — not the dep pin's.
+        fromDepsQuery: true,
         importMapIndex: entry.importMapIndex,
         integrity: entry.integrity,
         key: `${entry.key}?deps`,

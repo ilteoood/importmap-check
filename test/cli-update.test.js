@@ -477,3 +477,46 @@ test("--update does not leave temp files behind on write failure", async () => {
     await chmod(dir, dirStats.mode);
   }
 });
+
+test("--update rewrites the outer package on `?deps=` URLs and leaves the dep pin untouched", async () => {
+  // Regression test: replaceUrlSpecifier used to run lastIndexOf("@") across
+  // the whole URL, which pointed at the `?deps=<pkg>@<ver>` position instead
+  // of the outer package's version. The outer package's rewrite then
+  // corrupted the dep pin (e.g. `broadcast-channel@^4.17.0?deps=react@18.2.0`
+  // → `broadcast-channel@^4.17.0?deps=react@^7.0.0`). The fix scopes the `@`
+  // search to the path portion (before `?`) and skips `?deps=`-sourced
+  // occurrences in the rewrite pass.
+  const targetPath = await copyFixture("update-deps-query.html");
+  const result = await runCli(["--update", targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      "broadcast-channel": "7.0.0",
+      history: "6.0.0",
+      react: "19.2.7",
+    }),
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "broadcast-channel@^4.17.0": "4.17.0",
+      "history@^5.3.0": "5.3.0",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  const rewritten = await readFile(targetPath, "utf8");
+
+  // Outer package versions rewrite in-place.
+  assert.match(
+    rewritten,
+    /"broadcast-channel": "https:\/\/esm\.sh\/broadcast-channel@\^7\.0\.0\?deps=react@18\.2\.0"/,
+  );
+  assert.match(
+    rewritten,
+    /"history": "https:\/\/esm\.sh\/history@\^6\.0\.0\?deps=react@18\.2\.0"/,
+  );
+  // The standalone outer react entry rewrites normally.
+  assert.match(rewritten, /"react": "https:\/\/esm\.sh\/react@19\.2\.7"/);
+
+  // `?deps=react@18.2.0` pins are left alone.
+  assert.doesNotMatch(rewritten, /\?deps=react@19\.2\.7/);
+  assert.doesNotMatch(rewritten, /\?deps=react@\^7\.0\.0/);
+  assert.doesNotMatch(rewritten, /\?deps=react@\^6\.0\.0/);
+});

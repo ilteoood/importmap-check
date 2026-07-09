@@ -9,25 +9,25 @@ const escapeRegex = (text) => {
 };
 
 const replaceUrlSpecifier = (url, newSpecifier) => {
-  // The version separator is the LAST '@' in the URL because scoped packages
-  // carry a leading '@scope/' segment before '<pkg>@<version>'. The encoded
-  // specifier lives between this '@' and the next '/', '?', or end of URL.
-  const versionSeparatorIndex = url.lastIndexOf("@");
+  // Scope the version-`@` search to the PATH portion (before any `?` query
+  // string). esm.sh URLs can carry `?deps=<pkg>@<version>` pins whose `@` sits
+  // after the outer package's `@`; a plain `url.lastIndexOf("@")` would land
+  // on the dep pin and rewrite the wrong slot. Within the path portion, the
+  // last `@` is still the outer version separator, since scoped packages
+  // carry a leading `@scope/` earlier in the path.
+  const questionMarkIndex = url.indexOf("?");
+  const pathEnd = questionMarkIndex === -1 ? url.length : questionMarkIndex;
+  const versionSeparatorIndex = url.lastIndexOf("@", pathEnd - 1);
 
   if (versionSeparatorIndex === -1) {
     return url;
   }
 
-  let specifierEnd = url.length;
+  let specifierEnd = pathEnd;
   const slashIndex = url.indexOf("/", versionSeparatorIndex + 1);
-  const queryIndex = url.indexOf("?", versionSeparatorIndex + 1);
 
-  if (slashIndex !== -1) {
-    specifierEnd = Math.min(specifierEnd, slashIndex);
-  }
-
-  if (queryIndex !== -1) {
-    specifierEnd = Math.min(specifierEnd, queryIndex);
+  if (slashIndex !== -1 && slashIndex < specifierEnd) {
+    specifierEnd = slashIndex;
   }
 
   const encodedSpec = url.slice(versionSeparatorIndex + 1, specifierEnd);
@@ -88,8 +88,14 @@ const collectRewritesFromReport = (report) => {
       continue;
     }
 
+    // Skip `?deps=` query-pin occurrences: `?deps=` rewriting is deferred to
+    // a follow-up change (see readme-draft / update-mode spec). Including
+    // them here would target the OUTER URL's `@` slot with the dep pin's
+    // rewrite value and corrupt the outer package's version.
     const occurrences = report.allOccurrences.filter(
-      (occurrence) => occurrence.packageName === result.packageName,
+      (occurrence) =>
+        occurrence.packageName === result.packageName &&
+        !occurrence.fromDepsQuery,
     );
 
     for (const occurrence of occurrences) {

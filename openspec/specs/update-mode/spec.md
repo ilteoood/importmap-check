@@ -146,6 +146,12 @@ The system SHALL only rewrite destination URL strings captured during analysis a
 - **THEN** the system does not rewrite those occurrences
 - **AND** the rewrite target is limited to the import map values captured during analysis
 
+#### Scenario: `?deps=` query pin inside a destination URL is not rewritten
+- **WHEN** a destination URL carries a `?deps=<pkg>@<version>` query pin whose package the analyzer resolved to a newer version
+- **THEN** the system does not rewrite the `?deps=` pin's version in this change
+- **AND** the outer package's rewrite targets only the outer `<pkg>@<version>` position in the URL path (before any `?` query string)
+- **AND** the outer rewrite does not accidentally overwrite the `?deps=` position
+
 ### Requirement: Integrity Strip on Rewrite
 
 When `--update` rewrites a destination URL, the system SHALL remove any import map `integrity` entry keyed to either the original or rewritten URL, and SHALL emit a hard warning naming each stripped URL. The system SHALL NOT compute or write replacement integrity hashes in this change.
