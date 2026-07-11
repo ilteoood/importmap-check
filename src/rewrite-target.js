@@ -166,7 +166,11 @@ const collectStrippedIntegrityEntries = (report, rewrites) => {
   return stripped;
 };
 
-export const rewriteTargetInPlace = async (targetPath, report) => {
+// Pure computation of the rewrite plan: which entries change, which integrity
+// entries get stripped, and the exact would-be-written content — with NO file
+// modification. `--update` follows this with `commitTargetRewrite`; `--dry-run`
+// renders the plan (via the unified diff) and never commits.
+export const planTargetRewrite = async (targetPath, report) => {
   const rewrites = collectRewritesFromReport(report);
 
   if (rewrites.length === 0) {
@@ -174,9 +178,11 @@ export const rewriteTargetInPlace = async (targetPath, report) => {
       lookupFailures: report.lookupFailures,
       notes: report.notes,
       noChanges: true,
+      originalContent: null,
       rewrites: [],
       strippedIntegrityEntries: [],
       targetPath,
+      updatedContent: null,
       warnings: report.warnings,
     };
   }
@@ -205,6 +211,26 @@ export const rewriteTargetInPlace = async (targetPath, report) => {
     rewrites.map(({ newUrl, oldUrl }) => ({ newUrl, oldUrl })),
   );
 
+  return {
+    lookupFailures: report.lookupFailures,
+    notes: report.notes,
+    noChanges: false,
+    originalContent,
+    rewrites,
+    strippedIntegrityEntries,
+    targetPath,
+    updatedContent,
+    warnings: [...report.warnings, ...strippedIntegrityEntries],
+  };
+};
+
+// The only side effect: atomically write the planned content onto the target.
+// A no-change plan is a no-op so callers can commit unconditionally.
+export const commitTargetRewrite = async (targetPath, plan) => {
+  if (plan.noChanges) {
+    return;
+  }
+
   const originalStat = await stat(targetPath);
   const tempPath = path.join(
     path.dirname(targetPath),
@@ -212,7 +238,7 @@ export const rewriteTargetInPlace = async (targetPath, report) => {
   );
 
   try {
-    await writeFile(tempPath, updatedContent);
+    await writeFile(tempPath, plan.updatedContent);
     await chmod(tempPath, originalStat.mode & 0o777);
     await rename(tempPath, targetPath);
   } catch (error) {
@@ -223,14 +249,11 @@ export const rewriteTargetInPlace = async (targetPath, report) => {
     wrapped.cause = error;
     throw wrapped;
   }
+};
 
-  return {
-    lookupFailures: report.lookupFailures,
-    notes: report.notes,
-    noChanges: false,
-    rewrites,
-    strippedIntegrityEntries,
-    targetPath,
-    warnings: [...report.warnings, ...strippedIntegrityEntries],
-  };
+export const rewriteTargetInPlace = async (targetPath, report) => {
+  const plan = await planTargetRewrite(targetPath, report);
+  await commitTargetRewrite(targetPath, plan);
+
+  return plan;
 };

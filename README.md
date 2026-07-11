@@ -22,6 +22,7 @@ Options:
 - `--sources` — Show the import-map entry origins that contributed to each conflated package row.
 - `--width <num>` — Override the available report width (used with `--sources`). Defaults to the terminal width, or `120` when not running in a TTY.
 - `-u, --update` — Rewrite updateable entries in the target file in place. See **Update Mode** below for behavior, judgment calls, and caveats.
+- `--dry-run` — Preview the entries `--update` would rewrite as a unified diff, without writing the target file. Usable on its own, and takes precedence over `--update` when both are passed. `--sources` / `--width` have no effect in this mode. See **Update Mode** below.
 
 Supported target types:
 
@@ -46,7 +47,32 @@ $ esm-check-updates --update [options] <target-path>
 
 `--update` / `-u` rewrites updateable import map entries in the target file in place and prints a post-rewrite summary to stdout describing what changed. The default target is the npm registry's `latest` dist-tag.
 
-> ⚠️ **Make sure your target file is in version control and all changes are committed before running `--update`.** ECU does not snapshot before writing; the atomic write step protects against interrupted writes but not against losing work you hadn't committed.
+> ⚠️ **Make sure your target file is in version control and all changes are committed before running `--update`**, or preview the exact edits first with `--dry-run` (see **Previewing changes** below). ECU does not snapshot before writing; the atomic write step protects against interrupted writes but not against losing work you hadn't committed.
+
+### Previewing changes with `--dry-run`
+
+```sh
+$ esm-check-updates --dry-run <target-path>
+```
+
+`--dry-run` computes the same rewrite plan `--update` would apply and prints it as a unified line diff, **without writing the target file**. It is usable on its own, and when combined with `--update` the dry run wins — no file is written either way.
+
+```bash
+$ esm-check-updates --dry-run ./public/index.html
+Dry run — no files written.
+
+--- ./public/index.html
++++ ./public/index.html
+@@ -6,8 +6,8 @@
+         "imports": {
+-          "react": "https://esm.sh/react@19.2.3",
+-          "react-dom/client": "https://esm.sh/react-dom@19.2.3/client"
++          "react": "https://esm.sh/react@19.3.0",
++          "react-dom/client": "https://esm.sh/react-dom@19.3.0/client"
+         }
+```
+
+Because the diff is computed from the bytes `--update` would write, integrity entries that would be stripped appear as removed (`-`) lines. The same **Warnings**, **Stripped integrity entries**, **Lookup Failures**, and **Notes** sections that follow an `--update` are printed after the diff. When nothing would change, `--dry-run` prints `No changes would be written.` plus any applicable warnings or notes.
 
 ### Rewrite behavior by specifier class
 

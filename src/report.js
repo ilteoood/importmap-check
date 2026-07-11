@@ -1,3 +1,5 @@
+import { renderUnifiedDiff } from "./unified-diff.js";
+
 const colorize = (text, color, enabled) => {
   if (!enabled) {
     return text;
@@ -97,6 +99,63 @@ const appendSection = (lines, heading, bodyLines, colorEnabled) => {
 
   lines.push(colorize(`## ${heading}`, "cyan", colorEnabled));
   lines.push(...bodyLines);
+};
+
+// Shared trailing sections for the update and dry-run summaries. Rendered in a
+// fixed order: Warnings, Lookup Failures, Stripped integrity entries, Notes.
+const appendAncillarySections = (
+  lines,
+  { lookupFailures, notes, strippedIntegrityEntries, warnings },
+  colorEnabled,
+) => {
+  // Stripped-integrity warnings are appended to the aggregate warnings list but
+  // render in their own subsection below. Filter them out of the top-level
+  // Warnings section to avoid double-listing.
+  const analyzerWarnings = warnings.filter((warning) => {
+    return !(
+      warning.type === "integrity-strip" ||
+      (typeof warning.message === "string" &&
+        warning.message.startsWith("Stripped integrity entry for"))
+    );
+  });
+
+  if (analyzerWarnings.length > 0) {
+    appendSection(
+      lines,
+      "Warnings",
+      analyzerWarnings.map((warning) => `- ${warning.message}`),
+      colorEnabled,
+    );
+  }
+
+  if (lookupFailures.length > 0) {
+    appendSection(
+      lines,
+      "Lookup Failures",
+      lookupFailures.map((failure) => `- ${failure.message}`),
+      colorEnabled,
+    );
+  }
+
+  if (strippedIntegrityEntries && strippedIntegrityEntries.length > 0) {
+    appendSection(
+      lines,
+      "Stripped integrity entries",
+      strippedIntegrityEntries.map(
+        (entry) => `- ${entry.url} (triggered by ${entry.packageName})`,
+      ),
+      colorEnabled,
+    );
+  }
+
+  if (notes.length > 0) {
+    appendSection(
+      lines,
+      "Notes",
+      notes.map((note) => `- ${note.message}`),
+      colorEnabled,
+    );
+  }
 };
 
 const createTableHeader = (columns, colorEnabled) => {
@@ -505,32 +564,16 @@ export const formatUpdateSummary = (rewrite, report, options = {}) => {
     // surface so the user knows what the analyzer saw.
     const lines = ["No changes to write."];
 
-    if (report.warnings.length > 0) {
-      appendSection(
-        lines,
-        "Warnings",
-        report.warnings.map((warning) => `- ${warning.message}`),
-        colorEnabled,
-      );
-    }
-
-    if (rewrite.lookupFailures.length > 0) {
-      appendSection(
-        lines,
-        "Lookup Failures",
-        rewrite.lookupFailures.map((failure) => `- ${failure.message}`),
-        colorEnabled,
-      );
-    }
-
-    if (rewrite.notes.length > 0) {
-      appendSection(
-        lines,
-        "Notes",
-        rewrite.notes.map((note) => `- ${note.message}`),
-        colorEnabled,
-      );
-    }
+    appendAncillarySections(
+      lines,
+      {
+        lookupFailures: rewrite.lookupFailures,
+        notes: rewrite.notes,
+        strippedIntegrityEntries: rewrite.strippedIntegrityEntries,
+        warnings: report.warnings,
+      },
+      colorEnabled,
+    );
 
     return lines.join("\n");
   }
@@ -543,55 +586,63 @@ export const formatUpdateSummary = (rewrite, report, options = {}) => {
     lines.push(formatRewrittenRow(entry, colorEnabled));
   }
 
-  // The rewrite path appends stripped-integrity warnings to `rewrite.warnings`
-  // (so they still show up in the aggregate list), but the summary breaks them
-  // out into a dedicated `Stripped integrity entries` subsection below. Filter
-  // them out of the top-level Warnings section to avoid double-listing.
-  const analyzerWarnings = report.warnings.filter((warning) => {
-    return !(
-      warning.type === "integrity-strip" ||
-      (typeof warning.message === "string" &&
-        warning.message.startsWith("Stripped integrity entry for"))
-    );
-  });
+  appendAncillarySections(
+    lines,
+    {
+      lookupFailures: rewrite.lookupFailures,
+      notes: rewrite.notes,
+      strippedIntegrityEntries: rewrite.strippedIntegrityEntries,
+      warnings: report.warnings,
+    },
+    colorEnabled,
+  );
 
-  if (analyzerWarnings.length > 0) {
-    appendSection(
+  return lines.join("\n");
+};
+
+// Dry-run preview: the same plan `--update` would apply, rendered as a unified
+// diff with no file write. The diff replaces the update summary's before/after
+// rows; the ancillary sections are carried through unchanged.
+export const formatDryRunSummary = (plan, report, options = {}) => {
+  const colorEnabled =
+    options.colorEnabled ??
+    (Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined);
+
+  if (plan.noChanges) {
+    const lines = ["No changes would be written."];
+
+    appendAncillarySections(
       lines,
-      "Warnings",
-      analyzerWarnings.map((warning) => `- ${warning.message}`),
+      {
+        lookupFailures: plan.lookupFailures,
+        notes: plan.notes,
+        strippedIntegrityEntries: plan.strippedIntegrityEntries,
+        warnings: report.warnings,
+      },
       colorEnabled,
     );
+
+    return lines.join("\n");
   }
 
-  if (rewrite.lookupFailures.length > 0) {
-    appendSection(
-      lines,
-      "Lookup Failures",
-      rewrite.lookupFailures.map((failure) => `- ${failure.message}`),
-      colorEnabled,
-    );
-  }
+  const diff = renderUnifiedDiff(
+    plan.originalContent,
+    plan.updatedContent,
+    plan.targetPath,
+    { colorEnabled },
+  );
+  const lines = ["Dry run — no files written.", "", diff];
 
-  if (rewrite.strippedIntegrityEntries.length > 0) {
-    appendSection(
-      lines,
-      "Stripped integrity entries",
-      rewrite.strippedIntegrityEntries.map(
-        (entry) => `- ${entry.url} (triggered by ${entry.packageName})`,
-      ),
-      colorEnabled,
-    );
-  }
-
-  if (rewrite.notes.length > 0) {
-    appendSection(
-      lines,
-      "Notes",
-      rewrite.notes.map((note) => `- ${note.message}`),
-      colorEnabled,
-    );
-  }
+  appendAncillarySections(
+    lines,
+    {
+      lookupFailures: plan.lookupFailures,
+      notes: plan.notes,
+      strippedIntegrityEntries: plan.strippedIntegrityEntries,
+      warnings: report.warnings,
+    },
+    colorEnabled,
+  );
 
   return lines.join("\n");
 };

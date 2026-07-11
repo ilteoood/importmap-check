@@ -6,14 +6,17 @@ import path from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import {
   analyzeTarget,
+  commitTargetRewrite,
+  formatDryRunSummary,
   formatReport,
   formatUpdateSummary,
-  rewriteTargetInPlace,
+  planTargetRewrite,
 } from "../src/index.js";
 
 const HELP_FLAGS = new Set(["--help", "-h"]);
 const VERSION_FLAGS = new Set(["--version", "-v"]);
 const UPDATE_FLAGS = new Set(["--update", "-u"]);
+const DRY_RUN_FLAG = "--dry-run";
 const SOURCES_FLAG = "--sources";
 const WIDTH_FLAG = "--width";
 const MIN_WIDTH = 40;
@@ -48,11 +51,13 @@ const formatHelp = () => {
     "      --sources       Show source import-map entries in the report",
     "      --width <num>   Override available report width (used with --sources)",
     "  -u, --update        Rewrite updateable entries in the target file in place",
+    "      --dry-run       Preview the rewrite as a diff without writing the file",
   ].join("\n");
 };
 
 const parseArgs = (argv) => {
   const positional = [];
+  let dryRun = false;
   let sources = false;
   let update = false;
   let width;
@@ -70,6 +75,11 @@ const parseArgs = (argv) => {
 
     if (UPDATE_FLAGS.has(arg)) {
       update = true;
+      continue;
+    }
+
+    if (arg === DRY_RUN_FLAG) {
+      dryRun = true;
       continue;
     }
 
@@ -117,8 +127,10 @@ const parseArgs = (argv) => {
     throw createError("Expected exactly one target path.");
   }
 
+  // `--dry-run` wins over `--update`: a dry run never writes, even when both
+  // flags are present.
   return {
-    mode: update ? "update" : "check",
+    mode: dryRun ? "dry-run" : update ? "update" : "check",
     sources,
     targetPath: positional[0],
     width,
@@ -162,11 +174,20 @@ const main = async (argv = process.argv.slice(2)) => {
     withSources: parsed.sources,
   });
 
+  if (parsed.mode === "dry-run") {
+    const plan = await planTargetRewrite(parsed.targetPath, report);
+
+    writeStdout(formatDryRunSummary(plan, report));
+
+    return 0;
+  }
+
   if (parsed.mode === "update") {
-    const rewrite = await rewriteTargetInPlace(parsed.targetPath, report);
+    const plan = await planTargetRewrite(parsed.targetPath, report);
+    await commitTargetRewrite(parsed.targetPath, plan);
 
     writeStdout(
-      formatUpdateSummary(rewrite, report, {
+      formatUpdateSummary(plan, report, {
         sourcesEnabled: parsed.sources,
         width: parsed.width,
       }),
