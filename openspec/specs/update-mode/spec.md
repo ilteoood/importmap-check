@@ -34,7 +34,7 @@ The system SHALL rewrite each updateable analyzed entry in the target file by su
 #### Scenario: Pinned entry is bumped to latest
 - **WHEN** an entry uses a concrete pinned specifier such as `react@19.2.3` and the analyzer reports an available update to `19.3.0`
 - **THEN** the system rewrites the entry's destination URL to use `react@19.3.0`
-- **AND** the system preserves every other portion of the original destination URL (cdn family, scoped package name, subpath, and query parameters; rewriting `?deps=` values is out of scope for this change)
+- **AND** the system preserves every other portion of the original destination URL (cdn family, scoped package name, subpath, and non-`deps` query parameters), while any updateable `?deps=` pins on the same URL are rewritten per the Deps Query Pin Rewrite requirement
 
 #### Scenario: Caret range floor is lifted to new major
 - **WHEN** an entry uses a caret range specifier such as `react@^19.2.3` and the analyzer reports `latest` is `20.0.0`
@@ -132,6 +132,58 @@ The system SHALL rewrite each updateable analyzed entry in the target file by su
 - **THEN** the system rewrites each occurrence independently per its own captured `destinationUrl`
 - **AND** the post-rewrite summary continues to surface the destination-skew warning alongside the rewritten rows
 
+### Requirement: Deps Query Pin Rewrite
+
+When `--update` rewrites a target, the system SHALL rewrite each updateable `?deps=` query pin in an esm.sh destination URL using the same specifier-class rules applied to outer packages (pinned, caret, tilde, major-only selector, minor-only selector), while preserving the query string's dependency order, separators, and per-token encoding. The system SHALL rewrite a dependency pin by splicing the individual dependency token's version in place within the raw query string, and SHALL NOT re-serialize the query string through a URL query parser. Dist-tag dependency pins SHALL NOT be rewritten, matching outer dist-tag behavior.
+
+#### Scenario: Pinned dependency pin is bumped to latest
+- **WHEN** an esm.sh URL carries a query pin such as `?deps=react@18.2.0` and the analyzer reports an available update for `react` to `19.3.0`
+- **THEN** the system rewrites the dependency token in place to `react@19.3.0`
+- **AND** the system preserves every other portion of the URL (outer package, path, and the rest of the query string)
+
+#### Scenario: Range dependency pin is rewritten by specifier class
+- **WHEN** an esm.sh URL carries a query pin such as `?deps=scheduler@^0.23.0` and the analyzer reports `latest` for `scheduler` is `0.24.1`
+- **THEN** the system rewrites the dependency token to `scheduler@^0.24.0` using the same caret locking rules applied to outer packages
+- **AND** the system preserves the caret prefix and the dependency's position in the query string
+
+#### Scenario: Scoped dependency pin is rewritten
+- **WHEN** an esm.sh URL carries a query pin such as `?deps=@scope/pkg@1.2.3` and the analyzer reports an available update for `@scope/pkg`
+- **THEN** the system rewrites only the version token following the scoped package name
+- **AND** the system preserves the `@scope/` prefix
+
+#### Scenario: Dependency order and separators are preserved
+- **WHEN** an esm.sh URL carries a multi-dependency query pin such as `?deps=react@18.2.0,scheduler@0.23.0` and only `react` has an available update
+- **THEN** the rewritten query string is `?deps=react@19.3.0,scheduler@0.23.0`
+- **AND** the comma separator, the ordering, and the unchanged `scheduler` token are preserved exactly
+
+#### Scenario: Dependency pin encoding style is preserved
+- **WHEN** a dependency pin's version is percent-encoded in the original query string (for example `%5E0.23.0` for `^0.23.0`)
+- **THEN** the system rewrites the dependency token using the same encoding style as the original
+- **AND** the system does not re-serialize or re-encode the rest of the query string
+
+#### Scenario: Dist-tag dependency pin is not rewritten
+- **WHEN** an esm.sh URL carries a dist-tag dependency pin such as `?deps=react@beta`
+- **THEN** the system does not rewrite the dependency token
+- **AND** the system leaves the query string unchanged
+
+#### Scenario: Dependency pin with no available update is not rewritten
+- **WHEN** a dependency pin's resolved current version already equals the analyzer's `latestVersion` for that package
+- **THEN** the system does not rewrite the dependency token
+- **AND** the post-rewrite summary omits the dependency from the rewritten-row list
+
+### Requirement: Coalesced Multi-Edit URL Rewrite
+
+The system SHALL coalesce every rewrite that applies to a single destination URL — an outer package version bump and any number of `?deps=` dependency bumps that share that URL — into a single URL substitution, so that all applicable edits appear together in the rewritten file. The system SHALL NOT drop or overwrite one edit when another edit targets the same URL string.
+
+#### Scenario: Outer package and its dependency pins update together
+- **WHEN** an esm.sh URL such as `https://esm.sh/react-dom@19.2.3?deps=react@18.2.0,scheduler@0.23.0` has available updates for `react-dom`, `react`, and `scheduler`
+- **THEN** the system produces one rewritten URL that applies all three edits together
+- **AND** the outer `react-dom` version, the `react` dependency pin, and the `scheduler` dependency pin are all updated in the single rewritten value
+
+#### Scenario: Only some edits on a shared URL apply
+- **WHEN** a destination URL has an available update for its outer package but not for one of its `?deps=` pins
+- **THEN** the system rewrites the outer package version and leaves the unchanged dependency pin intact within the same rewritten URL
+
 ### Requirement: Updateable Entry Boundary
 
 The system SHALL only rewrite destination URL strings captured during analysis and SHALL avoid corrupting URL substrings or unrelated content during the rewrite pass.
@@ -146,21 +198,26 @@ The system SHALL only rewrite destination URL strings captured during analysis a
 - **THEN** the system does not rewrite those occurrences
 - **AND** the rewrite target is limited to the import map values captured during analysis
 
-#### Scenario: `?deps=` query pin inside a destination URL is not rewritten
+#### Scenario: `?deps=` query pin inside a destination URL is rewritten in place
 - **WHEN** a destination URL carries a `?deps=<pkg>@<version>` query pin whose package the analyzer resolved to a newer version
-- **THEN** the system does not rewrite the `?deps=` pin's version in this change
+- **THEN** the system rewrites the `?deps=` pin's version in place per the Deps Query Pin Rewrite requirement
 - **AND** the outer package's rewrite targets only the outer `<pkg>@<version>` position in the URL path (before any `?` query string)
-- **AND** the outer rewrite does not accidentally overwrite the `?deps=` position
+- **AND** the outer rewrite and the `?deps=` rewrites are coalesced into a single substitution for the shared URL so no edit overwrites another
 
 ### Requirement: Integrity Strip on Rewrite
 
-When `--update` rewrites a destination URL, the system SHALL remove any import map `integrity` entry keyed to either the original or rewritten URL, and SHALL emit a hard warning naming each stripped URL. The system SHALL NOT compute or write replacement integrity hashes in this change.
+When `--update` rewrites a destination URL, the system SHALL remove any import map `integrity` entry keyed to either the original or rewritten URL, and SHALL emit a hard warning naming each stripped URL. The system SHALL NOT compute or write replacement integrity hashes in this change. This applies whether the URL change originates from an outer package rewrite, a `?deps=` dependency pin rewrite, or both.
 
 #### Scenario: Integrity entry exists for a rewritten URL
 - **WHEN** the import map contains an `integrity` entry keyed to a destination URL that gets rewritten by `--update`
 - **THEN** the system removes that `integrity` entry from the rewritten file
 - **AND** the system emits a hard warning naming the stripped URL and the package that triggered the strip
 - **AND** the warning appears in the post-rewrite summary's stripped-integrity subsection
+
+#### Scenario: Integrity entry exists for a URL whose only change is a `?deps=` pin
+- **WHEN** the import map contains an `integrity` entry keyed to a destination URL whose only rewrite is to one of its `?deps=` dependency pins
+- **THEN** the system removes that `integrity` entry because the URL's bytes change
+- **AND** the system emits a hard warning naming the stripped URL
 
 #### Scenario: Integrity entry exists for an unrewritten URL
 - **WHEN** the import map contains an `integrity` entry keyed to a destination URL that is not rewritten by `--update`
