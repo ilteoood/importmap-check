@@ -54,10 +54,10 @@ const collectPackageOccurrences = (entries) => {
         currentVersion: dependencyPin.currentVersion,
         destinationUrl: entry.value,
         // `fromDepsQuery` marks this occurrence as sourced from the outer
-        // URL's `?deps=` query pin (not the outer package itself). The
-        // rewrite path uses this to skip these occurrences: `?deps=` rewrite
-        // is deferred to a follow-up change, and the outer URL's `@` slot is
-        // the outer package's version — not the dep pin's.
+        // URL's `?deps=` query pin (not the outer package itself). The rewrite
+        // path uses this to route the edit through the `?deps=` token splice
+        // rather than the outer `@`-slot rewrite, since the two target
+        // different regions of the shared destination URL.
         fromDepsQuery: true,
         importMapIndex: entry.importMapIndex,
         integrity: entry.integrity,

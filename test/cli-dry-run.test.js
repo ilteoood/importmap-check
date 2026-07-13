@@ -77,6 +77,36 @@ test("--dry-run on ranges shows lifted caret/tilde floors in the diff", async ()
   assert.equal(updated, original, "target file must be unchanged");
 });
 
+test("--dry-run shows coalesced `?deps=` rewrites in the diff and writes nothing", async () => {
+  const targetPath = await copyFixture("update-deps-multi.html");
+  const original = await readFile(targetPath, "utf8");
+
+  const result = await runCli(["--dry-run", targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      app: "2.0.0",
+      react: "19.3.0",
+      scheduler: "0.24.1",
+    }),
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "scheduler@^0.23.0": "0.23.0",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(
+    result.stdout,
+    /^-.*app@1\.0\.0\?deps=react@18\.2\.0,scheduler@\^0\.23\.0",?$/m,
+  );
+  assert.match(
+    result.stdout,
+    /^\+.*app@2\.0\.0\?deps=react@19\.3\.0,scheduler@\^0\.24\.0",?$/m,
+  );
+
+  const updated = await readFile(targetPath, "utf8");
+  assert.equal(updated, original, "target file must be unchanged");
+});
+
 test("--dry-run shows stripped integrity lines removed and the subsection", async () => {
   const targetPath = await copyFixture("update-integrity.html");
   const original = await readFile(targetPath, "utf8");

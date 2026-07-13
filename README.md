@@ -87,7 +87,7 @@ ECU preserves the specifier style you wrote. The exact rewrite depends on the sp
 | Minor-only selector | `react@18.3`    | `react@<latest major>.<latest minor>`                                                                      |
 | Dist-tag            | `react@beta`    | **not rewritten** — see _Dist-tag entries_ below                                                           |
 
-Each rewrite preserves every other portion of the URL (CDN family, scoped package name, subpath, query parameters). Caret and tilde rewrites follow npm's semver locking rules: caret locks the leftmost non-zero element of `[major, minor, patch]`; tilde locks the position immediately left of the rightmost-specified position.
+Each rewrite preserves every other portion of the URL (CDN family, scoped package name, subpath, and non-`deps` query parameters). Updateable `?deps=` pins on the same URL are rewritten too — see **`?deps=` query pins are rewritten in place** below. Caret and tilde rewrites follow npm's semver locking rules: caret locks the leftmost non-zero element of `[major, minor, patch]`; tilde locks the position immediately left of the rightmost-specified position.
 
 ### Major-version-zero ranges
 
@@ -120,11 +120,24 @@ Stripped entries are **not regenerated** in this version. SRI hashes are author-
 
 A future change will add `--regenerate-integrity` (with a `--no-regenerate-integrity` opt-out) once the browser-vs-CLI byte-stability question has been empirically validated.
 
-### `?deps=` query pins are not rewritten
+### `?deps=` query pins are rewritten in place
 
-esm.sh URLs may carry a `?deps=react@18,react-dom@19.2.3` query string pinning dependency versions. In this version, `--update` **analyzes and reports** `?deps=` pins in check-only output (in the existing three-column table) but **does not rewrite** those pins during `--update`. The root-package URL is rewritten; the dependency pins inside its `?deps=` query string are left unchanged.
+esm.sh URLs may carry a `?deps=react@18,react-dom@19.2.3` query string pinning dependency versions. `--update` rewrites updateable dependency pins the same way it rewrites the outer package: each pin's specifier class (pinned, caret, tilde, major-only, minor-only) is resolved and lifted per the same rules in the table above. Dist-tag dependency pins (e.g. `?deps=react@beta`) are left floating, matching outer dist-tag behavior.
 
-`?deps=` rewriting will land in a separate change where the query-string serialization concerns (separator handling, URL-encoding consistency) can be addressed in their own right.
+Dependency pins are rewritten by splicing the individual dependency token in place — the query string's dependency order, separators, and per-token encoding are preserved. ECU never re-serializes the query string through a URL parser, so a rewrite touches only the version tokens that actually change (keeping the diff minimal and avoiding the `+`→space decoding a round-trip would introduce).
+
+When a single URL needs several edits at once — an outer version bump plus one or more dependency-pin bumps — all edits are coalesced into one rewrite, so no edit overwrites another:
+
+```
+- "app": "https://esm.sh/app@1.0.0?deps=react@18.2.0,scheduler@^0.23.0"
++ "app": "https://esm.sh/app@2.0.0?deps=react@19.3.0,scheduler@^0.24.0"
+```
+
+If a rewritten URL has a corresponding `integrity` entry, that entry is stripped and a hard warning is emitted (see **Integrity entries are stripped, not regenerated** above) — this applies whether the URL changed because of the outer package, a `?deps=` pin, or both.
+
+> **Known limitation:** the post-rewrite summary groups rewrites by package name, so a package that appears both as an outer import-map entry and as a `?deps=` pin inside another package's URL produces summary lines that cannot be told apart. The rewrites themselves are still applied correctly to each distinct URL; only the summary is ambiguous. Distinguishing dependency-context rows is deferred to a future summary-clarity change.
+
+Encoded separators between dependencies (a `%2C` in place of the literal `,` esm.sh emits) are out of scope: both the parser and the rewriter operate on the literal-separator form esm.sh produces. If encoded separators surface in the wild, parse and rewrite support will be added together.
 
 ### Resolution tightening (check-only behavior change)
 

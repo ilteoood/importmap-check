@@ -478,14 +478,10 @@ test("--update does not leave temp files behind on write failure", async () => {
   }
 });
 
-test("--update rewrites the outer package on `?deps=` URLs and leaves the dep pin untouched", async () => {
-  // Regression test: replaceUrlSpecifier used to run lastIndexOf("@") across
-  // the whole URL, which pointed at the `?deps=<pkg>@<ver>` position instead
-  // of the outer package's version. The outer package's rewrite then
-  // corrupted the dep pin (e.g. `broadcast-channel@^4.17.0?deps=react@18.2.0`
-  // → `broadcast-channel@^4.17.0?deps=react@^7.0.0`). The fix scopes the `@`
-  // search to the path portion (before `?`) and skips `?deps=`-sourced
-  // occurrences in the rewrite pass.
+test("--update rewrites both the outer package and its `?deps=` pin on the same URL", async () => {
+  // The outer `@` search stays scoped to the path portion (before `?`), so the
+  // outer version and the `?deps=<pkg>@<ver>` pin are rewritten independently
+  // and coalesced into a single edit per URL — neither overwrites the other.
   const targetPath = await copyFixture("update-deps-query.html");
   const result = await runCli(["--update", targetPath], {
     NO_COLOR: "1",
@@ -503,20 +499,149 @@ test("--update rewrites the outer package on `?deps=` URLs and leaves the dep pi
   assert.equal(result.code, 0);
   const rewritten = await readFile(targetPath, "utf8");
 
-  // Outer package versions rewrite in-place.
+  // Outer package version and its dep pin both rewrite in-place on one URL.
   assert.match(
     rewritten,
-    /"broadcast-channel": "https:\/\/esm\.sh\/broadcast-channel@\^7\.0\.0\?deps=react@18\.2\.0"/,
+    /"broadcast-channel": "https:\/\/esm\.sh\/broadcast-channel@\^7\.0\.0\?deps=react@19\.2\.7"/,
   );
   assert.match(
     rewritten,
-    /"history": "https:\/\/esm\.sh\/history@\^6\.0\.0\?deps=react@18\.2\.0"/,
+    /"history": "https:\/\/esm\.sh\/history@\^6\.0\.0\?deps=react@19\.2\.7"/,
   );
   // The standalone outer react entry rewrites normally.
   assert.match(rewritten, /"react": "https:\/\/esm\.sh\/react@19\.2\.7"/);
 
-  // `?deps=react@18.2.0` pins are left alone.
-  assert.doesNotMatch(rewritten, /\?deps=react@19\.2\.7/);
+  // No stale `react@18.2.0` dep pin remains anywhere.
+  assert.doesNotMatch(rewritten, /react@18\.2\.0/);
+  // The outer `@` slot is never corrupted by the dep pin's value.
   assert.doesNotMatch(rewritten, /\?deps=react@\^7\.0\.0/);
-  assert.doesNotMatch(rewritten, /\?deps=react@\^6\.0\.0/);
+});
+
+test("--update coalesces an outer bump with multiple `?deps=` pins on one URL", async () => {
+  const targetPath = await copyFixture("update-deps-multi.html");
+  const result = await runCli(["--update", targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      app: "2.0.0",
+      react: "19.3.0",
+      scheduler: "0.24.1",
+    }),
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "scheduler@^0.23.0": "0.23.0",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  const rewritten = await readFile(targetPath, "utf8");
+
+  // Outer pinned bump, pinned dep bump, and caret-range dep lift all land in a
+  // single rewritten URL, preserving dep order and separators.
+  assert.match(
+    rewritten,
+    /"app": "https:\/\/esm\.sh\/app@2\.0\.0\?deps=react@19\.3\.0,scheduler@\^0\.24\.0"/,
+  );
+});
+
+test("--update applies only the changed edits when a shared URL has partial updates", async () => {
+  const targetPath = await copyFixture("update-deps-multi.html");
+  const result = await runCli(["--update", targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      app: "1.0.0",
+      react: "19.3.0",
+      scheduler: "0.23.0",
+    }),
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "scheduler@^0.23.0": "0.23.0",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  const rewritten = await readFile(targetPath, "utf8");
+
+  // Outer `app` (no update) and `scheduler` (no update) are preserved; only the
+  // `react` dep pin changes within the shared URL.
+  assert.match(
+    rewritten,
+    /"app": "https:\/\/esm\.sh\/app@1\.0\.0\?deps=react@19\.3\.0,scheduler@\^0\.23\.0"/,
+  );
+});
+
+test("--update rewrites a scoped `?deps=` pin end-to-end, preserving the scope", async () => {
+  const targetPath = await copyFixture("update-deps-scoped.html");
+  const result = await runCli(["--update", targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      app: "1.0.0",
+      "@scope/pkg": "2.0.0",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  const rewritten = await readFile(targetPath, "utf8");
+
+  assert.match(
+    rewritten,
+    /"app": "https:\/\/esm\.sh\/app@1\.0\.0\?deps=@scope\/pkg@2\.0\.0"/,
+  );
+});
+
+test("--update does not rewrite a dist-tag `?deps=` pin while bumping the outer package", async () => {
+  const targetPath = await copyFixture("update-deps-dist-tag.html");
+  const result = await runCli(["--update", targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({ app: "2.0.0", react: "19.3.0" }),
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "react@beta": "19.4.0-beta.1",
+    }),
+  });
+
+  assert.equal(result.code, 0);
+  const rewritten = await readFile(targetPath, "utf8");
+
+  // Outer `app` rewrites; the floating `react@beta` dep pin is left untouched.
+  assert.match(
+    rewritten,
+    /"app": "https:\/\/esm\.sh\/app@2\.0\.0\?deps=react@beta"/,
+  );
+});
+
+test("--update strips integrity when only a `?deps=` pin changes the URL", async () => {
+  const targetPath = await copyFixture("update-deps-integrity.html");
+  const result = await runCli(["--update", targetPath], {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({ lib: "1.0.0", react: "19.3.0" }),
+  });
+
+  assert.equal(result.code, 0);
+  const rewritten = await readFile(targetPath, "utf8");
+
+  // The dep pin changes the URL bytes, so its integrity hash is stripped.
+  assert.match(rewritten, /\?deps=react@19\.3\.0/);
+  assert.doesNotMatch(rewritten, /sha384-deps/);
+  assert.match(result.stdout, /## Stripped integrity entries/);
+  assert.match(result.stdout, /triggered by react/);
+});
+
+test("--update on `?deps=` pins is idempotent", async () => {
+  const targetPath = await copyFixture("update-deps-multi.html");
+  const env = {
+    NO_COLOR: "1",
+    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
+      app: "2.0.0",
+      react: "19.3.0",
+      scheduler: "0.24.1",
+    }),
+    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
+      "scheduler@^0.23.0": "0.23.0",
+      "scheduler@^0.24.0": "0.24.1",
+    }),
+  };
+
+  const first = await runCli(["--update", targetPath], env);
+  assert.equal(first.code, 0);
+
+  const second = await runCli(["--update", targetPath], env);
+  assert.equal(second.code, 0);
+  assert.match(second.stdout, /No changes to write\./);
 });

@@ -9,6 +9,7 @@ export { rewriteSpecifier } from "./rewrite-specifier.js";
 export {
   commitTargetRewrite,
   planTargetRewrite,
+  replaceDepsSpecifier,
   rewriteTargetInPlace,
 } from "./rewrite-target.js";
 export { renderUnifiedDiff } from "./unified-diff.js";

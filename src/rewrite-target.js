@@ -8,6 +8,17 @@ const escapeRegex = (text) => {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
+// Preserve the original encoding style: if the specifier in the URL was
+// percent-encoded, percent-encode the new specifier the same way; otherwise
+// emit the raw form (caret/tilde selectors typically appear decoded in import
+// maps even though strict URL parsing would require encoding). Shared by the
+// outer-slot and `?deps=` rewrites so both keep the identical philosophy.
+const encodeLikeOriginal = (originalSpec, newSpecifier) => {
+  return originalSpec.includes("%")
+    ? encodeURIComponent(newSpecifier)
+    : newSpecifier;
+};
+
 const replaceUrlSpecifier = (url, newSpecifier) => {
   // Scope the version-`@` search to the PATH portion (before any `?` query
   // string). esm.sh URLs can carry `?deps=<pkg>@<version>` pins whose `@` sits
@@ -31,20 +42,71 @@ const replaceUrlSpecifier = (url, newSpecifier) => {
   }
 
   const encodedSpec = url.slice(versionSeparatorIndex + 1, specifierEnd);
-  // Preserve the original encoding style: if the specifier in the URL was
-  // percent-encoded, percent-encode the new specifier the same way; otherwise
-  // emit the raw form (caret/tilde selectors typically appear decoded in
-  // import maps even though strict URL parsing would require encoding).
-  const hasPercentEncoding = encodedSpec.includes("%");
-  const newEncodedSpec = hasPercentEncoding
-    ? encodeURIComponent(newSpecifier)
-    : newSpecifier;
+  const newEncodedSpec = encodeLikeOriginal(encodedSpec, newSpecifier);
 
   return (
     url.slice(0, versionSeparatorIndex + 1) +
     newEncodedSpec +
     url.slice(specifierEnd)
   );
+};
+
+// Splice a single dependency's version token inside an esm.sh `?deps=` query
+// value, in place, preserving dependency order, separators, and per-token
+// encoding. We operate on the raw query text — never re-serializing through a
+// URL query parser — because a round-trip would re-encode the whole query
+// (`@`→`%40`, `,`→`%2C`) and decode `+` to a space, both of which would corrupt
+// the minimal-diff the tool guarantees. Separator handling mirrors the parse
+// side (`parseDependencyPins`): literal `,` between tokens and literal `@`
+// before the version. Every token whose package identity matches is spliced.
+export const replaceDepsSpecifier = (url, packageName, newSpecifier) => {
+  const questionMarkIndex = url.indexOf("?");
+
+  if (questionMarkIndex === -1) {
+    return url;
+  }
+
+  const query = url.slice(questionMarkIndex + 1);
+  let changed = false;
+
+  const newParams = query.split("&").map((param) => {
+    if (!param.startsWith("deps=")) {
+      return param;
+    }
+
+    const value = param.slice("deps=".length);
+    const newTokens = value.split(",").map((token) => {
+      const versionSeparatorIndex = token.lastIndexOf("@");
+
+      if (versionSeparatorIndex <= 0) {
+        return token;
+      }
+
+      // Trim only for identity comparison; splice preserves the raw token.
+      if (token.slice(0, versionSeparatorIndex).trim() !== packageName) {
+        return token;
+      }
+
+      const rawVersion = token.slice(versionSeparatorIndex + 1);
+      const newEncodedSpec = encodeLikeOriginal(rawVersion, newSpecifier);
+
+      if (rawVersion === newEncodedSpec) {
+        return token;
+      }
+
+      changed = true;
+
+      return token.slice(0, versionSeparatorIndex + 1) + newEncodedSpec;
+    });
+
+    return `deps=${newTokens.join(",")}`;
+  });
+
+  if (!changed) {
+    return url;
+  }
+
+  return url.slice(0, questionMarkIndex + 1) + newParams.join("&");
 };
 
 const rewriteDestinationUrls = (content, replacements) => {
@@ -77,86 +139,125 @@ const stripIntegrityEntry = (content, url) => {
   return content.replace(re, "");
 };
 
-const collectRewritesFromReport = (report) => {
-  // For each package result with hasUpdate=true, walk the matching occurrences
-  // from report.allOccurrences and compute the {oldUrl, newUrl} rewrite pair
-  // for each occurrence. Dist-tag entries are never rewritten.
-  const rewrites = [];
+const collectEdits = (report) => {
+  // One edit per updateable occurrence, including `?deps=` query-pin
+  // occurrences (which share the outer entry's destinationUrl). Each edit
+  // records which slot it targets — the outer version, or a specific dep
+  // token — so the coalescing pass can apply the right surgery. Dist-tag and
+  // other non-rewritable specifiers return null from rewriteSpecifier and are
+  // dropped here.
+  const resultByName = new Map(
+    report.packageResults.map((result) => [result.packageName, result]),
+  );
+  const edits = [];
 
-  for (const result of report.packageResults) {
-    if (!result.hasUpdate) {
+  for (const occurrence of report.allOccurrences) {
+    const result = resultByName.get(occurrence.packageName);
+
+    if (!result || !result.hasUpdate) {
       continue;
     }
 
-    // Skip `?deps=` query-pin occurrences: `?deps=` rewriting is deferred to
-    // a follow-up change (see readme-draft / update-mode spec). Including
-    // them here would target the OUTER URL's `@` slot with the dep pin's
-    // rewrite value and corrupt the outer package's version.
-    const occurrences = report.allOccurrences.filter(
-      (occurrence) =>
-        occurrence.packageName === result.packageName &&
-        !occurrence.fromDepsQuery,
+    const newSpecifier = rewriteSpecifier(
+      occurrence.specifier,
+      result.latestVersion,
     );
 
-    for (const occurrence of occurrences) {
-      const newSpecifier = rewriteSpecifier(
-        occurrence.specifier,
-        result.latestVersion,
-      );
-
-      // Dist-tag entries and any other non-rewritable specifiers return null.
-      if (newSpecifier === null) {
-        continue;
-      }
-
-      const newUrl = replaceUrlSpecifier(
-        occurrence.destinationUrl,
-        newSpecifier,
-      );
-
-      if (newUrl === occurrence.destinationUrl) {
-        // Defensive: nothing to do for no-op rewrites.
-        continue;
-      }
-
-      rewrites.push({
-        currentVersion: occurrence.currentVersion,
-        latestVersion: result.latestVersion,
-        newSpecifier,
-        newUrl,
-        oldSpecifier: occurrence.specifier,
-        oldUrl: occurrence.destinationUrl,
-        packageName: result.packageName,
-      });
+    if (newSpecifier === null) {
+      continue;
     }
+
+    edits.push({
+      currentVersion: occurrence.currentVersion,
+      destinationUrl: occurrence.destinationUrl,
+      fromDepsQuery: Boolean(occurrence.fromDepsQuery),
+      latestVersion: result.latestVersion,
+      newSpecifier,
+      oldSpecifier: occurrence.specifier,
+      packageName: occurrence.packageName,
+    });
   }
 
-  return rewrites;
+  return edits;
 };
 
-const collectStrippedIntegrityEntries = (report, rewrites) => {
-  // For each rewrite, check whether the occurrence had an `integrity` map
-  // attached (i.e. the import map contained an integrity section). If the
-  // original or rewritten URL appears as a key in that map, we strip it and
-  // record a hard warning.
+const collectRewritesFromReport = (report) => {
+  // Coalesce every edit that applies to a single destination URL — an outer
+  // version bump plus any number of `?deps=` dependency bumps sharing that URL
+  // — into ONE {oldUrl, newUrl} pair. A per-occurrence model would emit
+  // multiple pairs keyed on the same oldUrl, and the downstream whole-value
+  // string replacement would consume the string on the first pair and silently
+  // drop the rest.
+  //
+  // Outer edits are applied before dep edits for a stable order, though the two
+  // touch disjoint regions of the URL (path before `?` vs. the `?deps=` query),
+  // so the result is independent of order.
+  const edits = collectEdits(report).sort(
+    (left, right) => Number(left.fromDepsQuery) - Number(right.fromDepsQuery),
+  );
+  const byUrl = new Map();
+  const effectiveRewrites = [];
+
+  for (const edit of edits) {
+    const entry = byUrl.get(edit.destinationUrl) ?? {
+      newUrl: edit.destinationUrl,
+      oldUrl: edit.destinationUrl,
+      triggeringPackages: [],
+    };
+    const nextUrl = edit.fromDepsQuery
+      ? replaceDepsSpecifier(entry.newUrl, edit.packageName, edit.newSpecifier)
+      : replaceUrlSpecifier(entry.newUrl, edit.newSpecifier);
+
+    if (nextUrl === entry.newUrl) {
+      // This edit changed nothing (e.g. no-op splice); do not surface it.
+      continue;
+    }
+
+    entry.newUrl = nextUrl;
+    entry.triggeringPackages.push(edit.packageName);
+    byUrl.set(edit.destinationUrl, entry);
+
+    // Per-package transformation record consumed by the post-rewrite summary.
+    effectiveRewrites.push({
+      currentVersion: edit.currentVersion,
+      latestVersion: edit.latestVersion,
+      newSpecifier: edit.newSpecifier,
+      oldSpecifier: edit.oldSpecifier,
+      packageName: edit.packageName,
+    });
+  }
+
+  const urlReplacements = [...byUrl.values()].filter(
+    (entry) => entry.newUrl !== entry.oldUrl,
+  );
+
+  return { rewrites: effectiveRewrites, urlReplacements };
+};
+
+const collectStrippedIntegrityEntries = (report, urlReplacements) => {
+  // For each coalesced URL replacement, check whether an occurrence at that URL
+  // had an `integrity` map attached. If the original or rewritten URL appears
+  // as a key in that map, strip it and record a hard warning. This covers URL
+  // changes originating from an outer rewrite, a `?deps=` pin rewrite, or both,
+  // since any change to the URL's bytes invalidates its integrity hash.
   const stripped = [];
   const seen = new Set();
 
-  for (const rewrite of rewrites) {
+  for (const { newUrl, oldUrl, triggeringPackages } of urlReplacements) {
     const occurrence = report.allOccurrences.find(
-      (occurrence) => occurrence.destinationUrl === rewrite.oldUrl,
+      (occurrence) => occurrence.destinationUrl === oldUrl,
     );
 
     if (!occurrence || !occurrence.integrity) {
       continue;
     }
 
-    for (const url of [rewrite.oldUrl, rewrite.newUrl]) {
+    for (const url of [oldUrl, newUrl]) {
       if (occurrence.integrity[url] && !seen.has(url)) {
         seen.add(url);
         stripped.push({
-          message: `Stripped integrity entry for ${url} (triggered by ${rewrite.packageName}).`,
-          packageName: rewrite.packageName,
+          message: `Stripped integrity entry for ${url} (triggered by ${triggeringPackages[0]}).`,
+          packageName: triggeringPackages[0],
           url,
         });
       }
@@ -171,9 +272,9 @@ const collectStrippedIntegrityEntries = (report, rewrites) => {
 // modification. `--update` follows this with `commitTargetRewrite`; `--dry-run`
 // renders the plan (via the unified diff) and never commits.
 export const planTargetRewrite = async (targetPath, report) => {
-  const rewrites = collectRewritesFromReport(report);
+  const { rewrites, urlReplacements } = collectRewritesFromReport(report);
 
-  if (rewrites.length === 0) {
+  if (urlReplacements.length === 0) {
     return {
       lookupFailures: report.lookupFailures,
       notes: report.notes,
@@ -190,7 +291,7 @@ export const planTargetRewrite = async (targetPath, report) => {
   const originalContent = await readFile(targetPath, "utf8");
   const strippedIntegrityEntries = collectStrippedIntegrityEntries(
     report,
-    rewrites,
+    urlReplacements,
   );
   const strippedUrls = new Set(
     strippedIntegrityEntries.map((entry) => entry.url),
@@ -208,7 +309,7 @@ export const planTargetRewrite = async (targetPath, report) => {
 
   const updatedContent = rewriteDestinationUrls(
     strippedContent,
-    rewrites.map(({ newUrl, oldUrl }) => ({ newUrl, oldUrl })),
+    urlReplacements.map(({ newUrl, oldUrl }) => ({ newUrl, oldUrl })),
   );
 
   return {
