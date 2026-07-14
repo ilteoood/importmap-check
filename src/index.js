@@ -1,16 +1,16 @@
 export { check, preview, update } from "./api.js";
-export { analyzeTarget } from "./analyze-target.js";
+export { analyzeTarget } from "./analysis/analyze.js";
+export { resolveSemverRange } from "./analysis/resolve-version.js";
 export {
   formatDryRunSummary,
   formatReport,
   formatUpdateSummary,
-} from "./report.js";
-export { resolveSemverRange } from "./resolve-version.js";
-export { rewriteSpecifier } from "./rewrite-specifier.js";
+} from "./reporting/format.js";
+export { renderUnifiedDiff } from "./reporting/unified-diff.js";
+export { rewriteSpecifier } from "./rewrite/specifier.js";
 export {
   commitTargetRewrite,
   planTargetRewrite,
   replaceDepsSpecifier,
   rewriteTargetInPlace,
-} from "./rewrite-target.js";
-export { renderUnifiedDiff } from "./unified-diff.js";
+} from "./rewrite/target.js";

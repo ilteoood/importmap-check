@@ -1,7 +1,4 @@
-import {
-  MAJOR_SELECTOR_PATTERN,
-  MINOR_SELECTOR_PATTERN,
-} from "./parse-cdn-url.js";
+import { MAJOR_SELECTOR_PATTERN, MINOR_SELECTOR_PATTERN } from "../semver.js";
 
 // Default npm registry base URL. Callers may override this (see the CLI's
 // ECU_REGISTRY_URL knob) to point at a private registry or, in tests, a local
@@ -245,5 +242,5 @@ export const defaultResolveSpecifier = async (
   return resolveSemverRange(packageName, specifier, body);
 };
 
-// Shared with analyze-target for sorting semver-like strings.
+// Shared with analyze.js for sorting semver-like strings.
 export { compareVersions };

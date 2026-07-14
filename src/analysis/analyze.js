@@ -1,10 +1,10 @@
-import { loadImportMaps, normalizeImportMaps } from "./load-target.js";
+import { loadImportMaps, normalizeImportMaps } from "./load.js";
 import {
   buildCdnSpec,
   formatSourceLabel,
   parseDependencyPins,
   parseSupportedPackageFromUrl,
-} from "./parse-cdn-url.js";
+} from "./cdn-url.js";
 import {
   compareVersions,
   DEFAULT_REGISTRY_URL,

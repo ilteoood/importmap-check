@@ -57,6 +57,26 @@ advisory context for humans reading the reference branch — a rebuild may use a
 completely different structure, and `test/internals/` is rewritten to match
 whatever it chooses. **Do not feed this section to a spec-driven rebuild.**
 
+### Module map
+
+```
+src/
+  index.js                 public barrel (package main)
+  api.js                   check / preview / update verbs
+  semver.js                shared selector regexes (MAJOR/MINOR_SELECTOR_PATTERN)
+  analysis/
+    load.js                loadImportMaps, normalizeImportMaps, createAnalysisError
+    cdn-url.js             parseSupportedPackageFromUrl, parseDependencyPins, buildCdnSpec, formatSourceLabel
+    resolve-version.js     defaultResolveLatestVersion, defaultResolveSpecifier, resolveSemverRange, compareVersions
+    analyze.js             analyzeTarget
+  rewrite/
+    specifier.js           rewriteSpecifier
+    target.js              planTargetRewrite, commitTargetRewrite, rewriteTargetInPlace, replaceDepsSpecifier
+  reporting/
+    format.js              formatReport, formatUpdateSummary, formatDryRunSummary
+    unified-diff.js        renderUnifiedDiff
+```
+
 ### Internal functions
 
 ```

@@ -1,3 +1,5 @@
+import { MAJOR_SELECTOR_PATTERN, MINOR_SELECTOR_PATTERN } from "../semver.js";
+
 const tryParseUrl = (value) => {
   try {
     return new URL(value);
@@ -8,8 +10,6 @@ const tryParseUrl = (value) => {
 
 const PINNED_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const SEMVER_RANGE_PATTERN = /^[~^]\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?$/;
-export const MAJOR_SELECTOR_PATTERN = /^\d+$/;
-export const MINOR_SELECTOR_PATTERN = /^\d+\.\d+$/;
 // npm dist-tags are arbitrary strings (e.g. `latest`, `beta`, `preview`,
 // `insider`, `canary-minor`). We accept any token of word characters, dots,
 // and dashes as a potential specifier and let the registry resolve it.

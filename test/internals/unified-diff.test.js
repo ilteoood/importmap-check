@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderUnifiedDiff } from "../../src/unified-diff.js";
+import { renderUnifiedDiff } from "../../src/index.js";
 
 const opts = { colorEnabled: false };
 const ESC = String.fromCharCode(27);

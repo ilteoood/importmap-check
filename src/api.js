@@ -1,10 +1,10 @@
-import { analyzeTarget } from "./analyze-target.js";
+import { analyzeTarget } from "./analysis/analyze.js";
 import {
   formatDryRunSummary,
   formatReport,
   formatUpdateSummary,
-} from "./report.js";
-import { commitTargetRewrite, planTargetRewrite } from "./rewrite-target.js";
+} from "./reporting/format.js";
+import { commitTargetRewrite, planTargetRewrite } from "./rewrite/target.js";
 
 // Minimum, not-CLI-aware library API. Each verb takes a target path plus plain
 // options and returns `{ output, data }`:

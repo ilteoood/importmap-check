@@ -1,7 +1,4 @@
-import {
-  MAJOR_SELECTOR_PATTERN,
-  MINOR_SELECTOR_PATTERN,
-} from "./parse-cdn-url.js";
+import { MAJOR_SELECTOR_PATTERN, MINOR_SELECTOR_PATTERN } from "../semver.js";
 
 const parseVersionTriple = (version) => {
   const [majorStr, minorStr, patchStr] = version.split(".");

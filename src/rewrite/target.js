@@ -1,8 +1,8 @@
 import { chmod, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createAnalysisError } from "./load-target.js";
-import { rewriteSpecifier } from "./rewrite-specifier.js";
+import { createAnalysisError } from "../analysis/load.js";
+import { rewriteSpecifier } from "./specifier.js";
 
 const escapeRegex = (text) => {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
