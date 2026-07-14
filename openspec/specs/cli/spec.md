@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Define the user-facing command contract for `esm-check-updates` v1.
+Define the user-facing command contract for `esm-check-updates`.
 
 ## Requirements
 
 ### Requirement: Single-Command Invocation
-The system SHALL expose a single-command CLI invoked as `esm-check-updates <target-path>` in v1.
+The system SHALL expose a single-command CLI invoked as `esm-check-updates <target-path>`.
 
 #### Scenario: One target path is provided
 - **WHEN** the user runs `esm-check-updates <target-path>`
@@ -15,7 +15,7 @@ The system SHALL expose a single-command CLI invoked as `esm-check-updates <targ
 - **AND** the system treats that file as the only target for the invocation
 
 ### Requirement: Positional Target Arity
-The system SHALL require exactly one positional target path for normal execution in v1.
+The system SHALL require exactly one positional target path for normal execution.
 
 #### Scenario: No target path is provided
 - **WHEN** the user runs the command without a positional target path
@@ -125,10 +125,10 @@ The system SHALL accept `--dry-run` as a long-form-only flag (no short form) tha
 - **AND** the system does not modify the target file
 
 ### Requirement: Unknown Flag Handling
-The system SHALL reject unsupported CLI flags in v1.
+The system SHALL reject unsupported CLI flags.
 
 #### Scenario: Unknown flag is provided
-- **WHEN** the user runs the command with a flag that is not supported in v1
+- **WHEN** the user runs the command with a flag that is not supported
 - **THEN** the system rejects the invocation as invalid
 - **AND** the system writes the error to `stderr`
 - **AND** the system returns a non-zero exit code
@@ -148,14 +148,14 @@ The system SHALL validate the supplied target path before deeper import map anal
 - **AND** the system writes the error to `stderr`
 - **AND** the system returns a non-zero exit code
 
-#### Scenario: Target path is not supported in v1
+#### Scenario: Target path is not supported
 - **WHEN** the supplied target path is not a supported HTML or import map JSON target
 - **THEN** the system reports that the target type is unsupported
 - **AND** the system writes the error to `stderr`
 - **AND** the system returns a non-zero exit code
 
 ### Requirement: Check-Only Default Behavior
-The system SHALL inspect targets without modifying them in v1.
+The system SHALL inspect targets without modifying them by default.
 
 #### Scenario: Updates are available
 - **WHEN** the system finds upgrade candidates
@@ -219,10 +219,10 @@ The system SHALL provide concise help text for the supported command surface, in
 - **AND** the help text lists `--dry-run` with a description indicating it previews the rewrite as a diff without writing the target file
 
 ### Requirement: Built-In CLI Implementation
-The CLI implementation SHALL rely on Node.js built-ins for argument parsing and command dispatch in v1.
+The CLI implementation SHALL rely on Node.js built-ins for argument parsing and command dispatch.
 
 #### Scenario: CLI arguments are parsed
-- **WHEN** the CLI parses arguments and selects command behavior in v1
+- **WHEN** the CLI parses arguments and selects command behavior
 - **THEN** the implementation uses Node.js built-in capabilities rather than third-party CLI parsing libraries
 
 ### Requirement: Sources Flag
@@ -277,7 +277,6 @@ When `--sources` is provided, the system SHALL determine the available width by 
 
 ## Non-Goals
 
-- Updating files in place
 - Accepting multiple targets in one invocation
 - Recursive project scanning
 - JSON output

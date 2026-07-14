@@ -202,13 +202,6 @@ const resolveAvailableWidth = (options) => {
     return options.width;
   }
 
-  if (
-    typeof process.stdout.columns === "number" &&
-    process.stdout.columns > 0
-  ) {
-    return process.stdout.columns;
-  }
-
   return FALLBACK_WIDTH;
 };
 
@@ -444,9 +437,7 @@ const computeSectionWidths = (results, sourcesEnabled, availableWidth) => {
 };
 
 export const formatReport = (report, options = {}) => {
-  const colorEnabled =
-    options.colorEnabled ??
-    (Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined);
+  const colorEnabled = options.colorEnabled ?? false;
   const sourcesEnabled = options.sourcesEnabled ?? false;
   const availableWidth = sourcesEnabled
     ? resolveAvailableWidth(options)
@@ -554,9 +545,7 @@ const dedupeRewritesByNameAndSpecifier = (rewrites) => {
 };
 
 export const formatUpdateSummary = (rewrite, report, options = {}) => {
-  const colorEnabled =
-    options.colorEnabled ??
-    (Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined);
+  const colorEnabled = options.colorEnabled ?? false;
 
   if (rewrite.noChanges) {
     // No entries were rewritten, but analyzer notes/warnings (e.g. dist-tag
@@ -604,9 +593,7 @@ export const formatUpdateSummary = (rewrite, report, options = {}) => {
 // diff with no file write. The diff replaces the update summary's before/after
 // rows; the ancillary sections are carried through unchanged.
 export const formatDryRunSummary = (plan, report, options = {}) => {
-  const colorEnabled =
-    options.colorEnabled ??
-    (Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined);
+  const colorEnabled = options.colorEnabled ?? false;
 
   if (plan.noChanges) {
     const lines = ["No changes would be written."];

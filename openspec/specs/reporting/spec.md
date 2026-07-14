@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the human-readable reporting behavior for `esm-check-updates` v1.
+Define the human-readable reporting behavior for `esm-check-updates`.
 ## Requirements
 ### Requirement: Human-Readable Terminal Output
 The system SHALL present analysis results in human-readable terminal output.
@@ -256,7 +256,7 @@ The dry-run preview SHALL begin with a banner indicating that no files were writ
 - **AND** the output does not include a unified diff
 
 ### Requirement: Partial Lookup Success Semantics
-The system SHALL treat partial package lookup success as a successful check in v1.
+The system SHALL treat partial package lookup success as a successful check.
 
 #### Scenario: some package lookups fail
 - **WHEN** one or more package lookups fail but the overall check completes and other package results were produced
@@ -268,7 +268,6 @@ The system SHALL treat partial package lookup success as a successful check in v
 - JSON output
 - Interactive output
 - Exact frozen spacing or column width rules
-- Output formats for file rewrite mode
 
 ## Open Questions
 

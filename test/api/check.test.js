@@ -1,0 +1,139 @@
+import path from "node:path";
+import { after, before, test } from "node:test";
+import assert from "node:assert/strict";
+
+import { check } from "../../src/index.js";
+import { fixturesRoot } from "../helpers/cli.js";
+import { packument, startMockRegistry } from "../helpers/mock-registry.js";
+
+// Layer-2 contract tests for the `check` verb: assert on the returned
+// { output, data } semantically (values, section presence, source handling) —
+// not on exact table spacing, which the reporting spec calls a non-goal.
+
+const fixture = (name) => path.join(fixturesRoot, name);
+
+let registry;
+
+before(async () => {
+  registry = await startMockRegistry({
+    react: packument("react", { latest: "19.3.0" }),
+    "react-dom": packument("react-dom", { latest: "19.3.0" }),
+  });
+});
+
+after(async () => {
+  await registry.close();
+});
+
+const runCheck = (name, options = {}) =>
+  check(fixture(name), {
+    colorEnabled: false,
+    registryBaseUrl: registry.url,
+    ...options,
+  });
+
+test("returns structured data for an updateable package", async () => {
+  const { data } = await runCheck("inline-importmap.html");
+  const react = data.packageResults.find((r) => r.packageName === "react");
+
+  assert.deepEqual(react.resolvedVersions, ["19.2.3"]);
+  assert.equal(react.latestVersion, "19.3.0");
+  assert.equal(react.hasUpdate, true);
+  assert.equal(react.severity, "minor");
+  assert.deepEqual(react.specifiers, []);
+});
+
+test("renders an Updates section with a package/resolved/latest row", async () => {
+  const { output } = await runCheck("inline-importmap.html");
+
+  assert.match(output, /## Updates/);
+  assert.match(output, /Package[^\n]*Resolved[^\n]*Latest/);
+  assert.match(output, /react[^\n]*19\.2\.3[^\n]*19\.3\.0/);
+  assert.match(output, /react-dom[^\n]*19\.2\.3[^\n]*19\.3\.0/);
+});
+
+test("omits the Source column by default and includes it with sources", async () => {
+  const withoutSources = await runCheck("inline-importmap.html");
+
+  assert.doesNotMatch(withoutSources.output, /Source/);
+  for (const result of withoutSources.data.packageResults) {
+    assert.equal(result.sources, undefined);
+  }
+
+  const withSources = await runCheck("inline-importmap.html", {
+    sources: true,
+    width: 200,
+  });
+
+  assert.match(
+    withSources.output,
+    /Package[^\n]*Resolved[^\n]*Latest[^\n]*Source/,
+  );
+  assert.match(withSources.output, /react[^\n]*react \(jsdelivr\)/);
+  const react = withSources.data.packageResults.find(
+    (r) => r.packageName === "react",
+  );
+  assert.ok(Array.isArray(react.sources) && react.sources.length >= 1);
+});
+
+test("deduplicates and sorts sources across import maps", async () => {
+  const { data } = await runCheck("duplicate-sources.html", { sources: true });
+  const react = data.packageResults.find((r) => r.packageName === "react");
+
+  assert.equal(react.sources.length, 1);
+  assert.equal(react.sources[0].label, "react (esm.sh)");
+
+  const scoped = await runCheck("scopes-and-remaps.html", { sources: true });
+  const scopedReact = scoped.data.packageResults.find(
+    (r) => r.packageName === "react",
+  );
+
+  assert.deepEqual(
+    scopedReact.sources.map((s) => s.label),
+    [
+      "./vendor/react.js (esm.sh)",
+      "https://cdn.jsdelivr.net/npm/react@19.0.0/ (jsdelivr)",
+      "react/ (jsdelivr)",
+    ],
+  );
+});
+
+test("wraps overflowing sources onto multiple lines (behavior, not exact indent)", async () => {
+  const { output } = await runCheck("scopes-and-remaps.html", {
+    sources: true,
+    width: 60,
+  });
+
+  // At a narrow width the three react sources cannot sit on one comma-joined
+  // line, so each renders on its own line. We assert the wrapping behavior, not
+  // any exact indentation or column width.
+  const sourceLines = output
+    .split("\n")
+    .filter((line) => /\((esm\.sh|jsdelivr)\)/.test(line));
+
+  assert.ok(
+    sourceLines.length >= 2,
+    `expected sources to wrap onto multiple lines, got ${sourceLines.length}`,
+  );
+});
+
+test("reports up-to-date packages in the Current section", async () => {
+  // scopes-and-remaps pins react at 19.1.0 / 19.2.3; a matching latest keeps it
+  // out of Updates. Use a dedicated registry so `latest` equals the pin.
+  const currentRegistry = await startMockRegistry({
+    react: packument("react", { latest: "19.2.3" }),
+  });
+
+  try {
+    const { data, output } = await check(fixture("inline-importmap.html"), {
+      colorEnabled: false,
+      registryBaseUrl: currentRegistry.url,
+    });
+    const react = data.packageResults.find((r) => r.packageName === "react");
+
+    assert.equal(react.hasUpdate, false);
+    assert.match(output, /## Current/);
+  } finally {
+    await currentRegistry.close();
+  }
+});

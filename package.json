@@ -34,8 +34,10 @@
     "check:lint": "eslint .",
     "format": "prettier --write . && eslint --cache --fix .",
     "lint": "eslint .",
-    "test": "node --test 'test/*.test.js'",
-    "test:only": "node --test --test-only 'test/*.test.js'",
+    "test": "node --test 'test/**/*.test.js'",
+    "test:only": "node --test --test-only 'test/**/*.test.js'",
+    "test:baseline": "node --test 'test/api/*.test.js' 'test/cli/*.test.js'",
+    "test:internals": "node --test 'test/internals/*.test.js'",
     "dep:check": "npx npm-check-updates"
   },
   "devDependencies": {

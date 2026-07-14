@@ -11,6 +11,20 @@ Features:
 - Modern CDN support: [jsDelivr](https://www.jsdelivr.com/esm), [esm.sh](https://esm.sh/)
 - Simple, no-dep CLI.
 
+## Installation
+
+Run it on demand with `npx`:
+
+```sh
+$ npx esm-check-updates <target-path>
+```
+
+Or install it globally:
+
+```sh
+$ npm install --global esm-check-updates
+```
+
 ## Usage
 
 ```sh
@@ -24,20 +38,22 @@ Options:
 - `-u, --update` — Rewrite updateable entries in the target file in place. See **Update Mode** below for behavior, judgment calls, and caveats.
 - `--dry-run` — Preview the entries `--update` would rewrite as a unified diff, without writing the target file. Usable on its own, and takes precedence over `--update` when both are passed. `--sources` / `--width` have no effect in this mode. See **Update Mode** below.
 
+Environment:
+
+- `ECU_REGISTRY_URL` — Base URL of the npm registry used to resolve versions and dist-tags. Defaults to `https://registry.npmjs.org`. Point it at a private registry mirror if needed.
+
 Supported target types:
 
 - Standalone import map JSON files
 - HTML files with one or more inline `<script type="importmap">` blocks
 
-Current behavior:
+What ECU analyzes:
 
 - Parses import map `imports` entries from JSON and inline HTML
 - Supports package-style keys and remap-style URL/path keys
 - Analyzes `jsdelivr` and `esm.sh` destination URLs
 - Combines multiple inline import maps into one package-level analysis result
-- Optionally shows contributing import-map entries with `--sources`
 - Warns for supported-but-unparseable entries and unsupported `scopes`
-- Use `--update` / `-u` to rewrite updateable entries in place (see **Update Mode**)
 
 ## Update Mode
 

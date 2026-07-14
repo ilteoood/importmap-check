@@ -1,8 +1,31 @@
-import { isObjectRecord } from "./load-target.js";
 import {
   MAJOR_SELECTOR_PATTERN,
   MINOR_SELECTOR_PATTERN,
 } from "./parse-cdn-url.js";
+
+// Default npm registry base URL. Callers may override this (see the CLI's
+// ECU_REGISTRY_URL knob) to point at a private registry or, in tests, a local
+// mock registry — keeping registry access an explicit dependency rather than a
+// hard-coded host.
+export const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
+
+const encodePackageName = (packageName) =>
+  packageName
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+const fetchPackument = async (packageName, registryBaseUrl) => {
+  const response = await fetch(
+    `${registryBaseUrl}/${encodePackageName(packageName)}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(`npm registry request failed with ${response.status}`);
+  }
+
+  return response.json();
+};
 
 const compareVersions = (left, right) => {
   const leftParts = left
@@ -32,40 +55,11 @@ const compareVersions = (left, right) => {
   return 0;
 };
 
-const parseLatestVersionOverrides = () => {
-  const raw = process.env.ECU_TEST_LATEST_VERSIONS;
-
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-
-    return isObjectRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
-export const defaultResolveLatestVersion = async (packageName) => {
-  const overrides = parseLatestVersionOverrides();
-
-  if (overrides && typeof overrides[packageName] === "string") {
-    return overrides[packageName];
-  }
-
-  const encodedPackage = packageName
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  const response = await fetch(`https://registry.npmjs.org/${encodedPackage}`);
-
-  if (!response.ok) {
-    throw new Error(`npm registry request failed with ${response.status}`);
-  }
-
-  const body = await response.json();
+export const defaultResolveLatestVersion = async (
+  packageName,
+  registryBaseUrl = DEFAULT_REGISTRY_URL,
+) => {
+  const body = await fetchPackument(packageName, registryBaseUrl);
   const latestVersion = body?.["dist-tags"]?.latest;
 
   if (typeof latestVersion !== "string" || latestVersion.length === 0) {
@@ -232,41 +226,12 @@ export const resolveSemverRange = (packageName, specifier, registryBody) => {
   return null;
 };
 
-const parseSpecifierOverrides = () => {
-  const raw = process.env.ECU_TEST_SPECIFIER_VERSIONS;
-
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-
-    return isObjectRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
-export const defaultResolveSpecifier = async (packageName, specifier) => {
-  const overrides = parseSpecifierOverrides();
-  const overrideKey = `${packageName}@${specifier}`;
-
-  if (overrides && typeof overrides[overrideKey] === "string") {
-    return overrides[overrideKey];
-  }
-
-  const encodedPackage = packageName
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  const response = await fetch(`https://registry.npmjs.org/${encodedPackage}`);
-
-  if (!response.ok) {
-    throw new Error(`npm registry request failed with ${response.status}`);
-  }
-
-  const body = await response.json();
+export const defaultResolveSpecifier = async (
+  packageName,
+  specifier,
+  registryBaseUrl = DEFAULT_REGISTRY_URL,
+) => {
+  const body = await fetchPackument(packageName, registryBaseUrl);
 
   // Try dist-tag lookup first (covers arbitrary tag names), then fall back to
   // semver-range/major/minor selector resolution. Returns null when neither

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { replaceDepsSpecifier } from "../src/index.js";
+import { replaceDepsSpecifier } from "../../src/index.js";
 
 test("splices a pinned dependency version in place", () => {
   assert.equal(

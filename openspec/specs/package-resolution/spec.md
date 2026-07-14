@@ -2,10 +2,10 @@
 
 ## Purpose
 
-Define how `esm-check-updates` v1 identifies updateable packages from supported CDN-backed import map entries.
+Define how `esm-check-updates` identifies updateable packages from supported CDN-backed import map entries.
 ## Requirements
 ### Requirement: Supported CDN Families
-The system SHALL support `esm.sh` and `jsdelivr` CDN URL families in v1.
+The system SHALL support `esm.sh` and `jsdelivr` CDN URL families.
 
 #### Scenario: esm.sh mapping is encountered
 - **WHEN** an import entry value uses a supported `esm.sh` package URL format
@@ -21,7 +21,7 @@ The system SHALL support `esm.sh` and `jsdelivr` CDN URL families in v1.
 - **THEN** the system attempts to extract the package identity and pinned version
 
 #### Scenario: other CDN mapping is encountered
-- **WHEN** an import entry value points to a CDN family outside the supported v1 set
+- **WHEN** an import entry value points to a CDN family outside the supported set
 - **THEN** the system excludes it from update analysis
 - **AND** the system may report it as unsupported
 
@@ -72,12 +72,12 @@ The system SHALL extract a concrete pinned package version from supported CDN-ba
 
 #### Scenario: prerelease version is used as a pinned version
 - **WHEN** an entry contains a prerelease version such as `16.3.0-preview.5` or `16.3.0-canary.78` in a supported CDN URL format
-- **THEN** the system treats the prerelease version as a concrete pinned version for update analysis in v1
+- **THEN** the system treats the prerelease version as a concrete pinned version for update analysis
 - **AND** the system compares the prerelease version against the stable `latest` dist-tag from the npm registry
-- **AND** the system does not attempt channel-aware prerelease comparison (e.g. comparing `preview` to `preview`) in v1
+- **AND** the system does not attempt channel-aware prerelease comparison (e.g. comparing `preview` to `preview`)
 
 ### Requirement: Package-Level Conflation
-The system SHALL conflate related entries for the same package to a single candidate target version in v1.
+The system SHALL conflate related entries for the same package to a single candidate target version.
 
 #### Scenario: multiple entries map to one package
 - **WHEN** multiple import entries correspond to the same package, including package subpaths

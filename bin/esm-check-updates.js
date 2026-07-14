@@ -4,14 +4,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 
 import packageJson from "../package.json" with { type: "json" };
-import {
-  analyzeTarget,
-  commitTargetRewrite,
-  formatDryRunSummary,
-  formatReport,
-  formatUpdateSummary,
-  planTargetRewrite,
-} from "../src/index.js";
+import { check, preview, update } from "../src/index.js";
 
 const HELP_FLAGS = new Set(["--help", "-h"]);
 const VERSION_FLAGS = new Set(["--version", "-v"]);
@@ -170,38 +163,53 @@ const main = async (argv = process.argv.slice(2)) => {
 
   await validateTargetPath(parsed.targetPath);
 
-  const report = await analyzeTarget(parsed.targetPath, {
-    withSources: parsed.sources,
-  });
+  // Presentation and registry access are decided here (Layer 3) and passed into
+  // the not-CLI-aware library verbs, which never sniff the terminal themselves.
+  const colorEnabled =
+    Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined;
+  const registryBaseUrl = process.env.ECU_REGISTRY_URL || undefined;
 
   if (parsed.mode === "dry-run") {
-    const plan = await planTargetRewrite(parsed.targetPath, report);
+    const { output } = await preview(parsed.targetPath, {
+      colorEnabled,
+      registryBaseUrl,
+    });
 
-    writeStdout(formatDryRunSummary(plan, report));
+    writeStdout(output);
 
     return 0;
   }
 
   if (parsed.mode === "update") {
-    const plan = await planTargetRewrite(parsed.targetPath, report);
-    await commitTargetRewrite(parsed.targetPath, plan);
+    const { output } = await update(parsed.targetPath, {
+      colorEnabled,
+      registryBaseUrl,
+    });
 
-    writeStdout(
-      formatUpdateSummary(plan, report, {
-        sourcesEnabled: parsed.sources,
-        width: parsed.width,
-      }),
-    );
+    writeStdout(output);
 
     return 0;
   }
 
-  writeStdout(
-    formatReport(report, {
-      sourcesEnabled: parsed.sources,
-      width: parsed.width,
-    }),
-  );
+  // `--sources` renders a width-aware Source column. When no explicit --width is
+  // given, fall back to the current terminal width (Layer 3 concern), then to
+  // the library's own default.
+  const width =
+    parsed.width ??
+    (parsed.sources &&
+    typeof process.stdout.columns === "number" &&
+    process.stdout.columns > 0
+      ? process.stdout.columns
+      : undefined);
+
+  const { output } = await check(parsed.targetPath, {
+    colorEnabled,
+    registryBaseUrl,
+    sources: parsed.sources,
+    width,
+  });
+
+  writeStdout(output);
 
   return 0;
 };

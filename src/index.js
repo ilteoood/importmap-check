@@ -1,3 +1,4 @@
+export { check, preview, update } from "./api.js";
 export { analyzeTarget } from "./analyze-target.js";
 export {
   formatDryRunSummary,

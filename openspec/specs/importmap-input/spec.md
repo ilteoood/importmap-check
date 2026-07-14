@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the import map input surface that `esm-check-updates` v1 is required to understand.
+Define the import map input surface that `esm-check-updates` is required to understand.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ The system SHALL support HTML files that contain an inline `<script type="import
 - **AND** the system returns a non-zero exit code
 
 ### Requirement: Imports Section Support
-The system SHALL inspect entries in the top-level `imports` section in v1.
+The system SHALL inspect entries in the top-level `imports` section.
 
 #### Scenario: Imports section is present
 - **WHEN** the import map contains an `imports` object
@@ -71,7 +71,7 @@ The system SHALL classify supported import-map entries by key shape so it can di
 - **THEN** the system excludes that entry from update analysis
 
 ### Requirement: Scopes Handling
-The system SHALL treat import map `scopes` as recognized but not yet supported in v1.
+The system SHALL treat import map `scopes` as recognized but not yet supported.
 
 #### Scenario: Scopes are present in an import map
 - **WHEN** the import map contains a top-level `scopes` object
@@ -87,7 +87,7 @@ The system SHALL treat CDN-backed import entries as in scope for update analysis
 
 #### Scenario: supported CDN families are encountered
 - **WHEN** an import entry value points to `jsdelivr` or `esm.sh`
-- **THEN** the system treats that entry as belonging to a supported CDN family in v1
+- **THEN** the system treats that entry as belonging to a supported CDN family
 
 #### Scenario: Non-CDN mapping is present
 - **WHEN** an import entry value is a local path, same-origin path, or other non-CDN mapping

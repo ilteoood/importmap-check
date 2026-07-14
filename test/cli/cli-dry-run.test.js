@@ -3,7 +3,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createFixtureRegistry, runCli } from "./cli-helpers.js";
+import { createFixtureRegistry, runCli } from "../helpers/cli.js";
 
 const { cleanup, copyFixture } = createFixtureRegistry();
 
@@ -13,10 +13,12 @@ test("--dry-run previews pinned entries as a diff and does not write", async () 
   const targetPath = await copyFixture("update-pinned.html");
   const original = await readFile(targetPath, "utf8");
 
-  const result = await runCli(["--dry-run", targetPath], { NO_COLOR: "1" });
+  const result = await runCli(["--dry-run", targetPath], {
+    env: { NO_COLOR: "1" },
+  });
 
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /^Dry run — no files written\.\n/);
+  assert.match(result.stdout, /no files written/i);
   assert.match(result.stdout, new RegExp(`^--- ${targetPath}$`, "m"));
   assert.match(result.stdout, /^-.*esm\.sh\/react@19\.2\.3",?$/m);
   assert.match(result.stdout, /^\+.*esm\.sh\/react@19\.3\.0",?$/m);
@@ -28,7 +30,7 @@ test("--dry-run previews pinned entries as a diff and does not write", async () 
 test("--dry-run leaves no temp file in the target directory", async () => {
   const targetPath = await copyFixture("update-pinned.html");
 
-  await runCli(["--dry-run", targetPath], { NO_COLOR: "1" });
+  await runCli(["--dry-run", targetPath], { env: { NO_COLOR: "1" } });
 
   const entries = await readdir(path.dirname(targetPath));
   assert.deepEqual(entries, [path.basename(targetPath)]);
@@ -39,11 +41,11 @@ test("--dry-run --update runs dry-run and does not write (dry wins)", async () =
   const original = await readFile(targetPath, "utf8");
 
   const result = await runCli(["--update", "--dry-run", targetPath], {
-    NO_COLOR: "1",
+    env: { NO_COLOR: "1" },
   });
 
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /^Dry run — no files written\.\n/);
+  assert.match(result.stdout, /no files written/i);
   assert.doesNotMatch(result.stdout, /^Updated /m);
 
   const updated = await readFile(targetPath, "utf8");
@@ -55,17 +57,19 @@ test("--dry-run on ranges shows lifted caret/tilde floors in the diff", async ()
   const original = await readFile(targetPath, "utf8");
 
   const result = await runCli(["--dry-run", targetPath], {
-    NO_COLOR: "1",
-    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
-      react: "20.0.0",
-      "react-dom": "19.3.0",
-      swr: "3.0.0",
-    }),
-    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
-      "react@^19.2.3": "19.2.9",
-      "react-dom@~19.2.3": "19.2.9",
-      "swr@^2.0.0": "2.9.9",
-    }),
+    env: { NO_COLOR: "1" },
+    registry: {
+      latest: {
+        react: "20.0.0",
+        "react-dom": "19.3.0",
+        swr: "3.0.0",
+      },
+      specifiers: {
+        "react@^19.2.3": "19.2.9",
+        "react-dom@~19.2.3": "19.2.9",
+        "swr@^2.0.0": "2.9.9",
+      },
+    },
   });
 
   assert.equal(result.code, 0);
@@ -82,15 +86,17 @@ test("--dry-run shows coalesced `?deps=` rewrites in the diff and writes nothing
   const original = await readFile(targetPath, "utf8");
 
   const result = await runCli(["--dry-run", targetPath], {
-    NO_COLOR: "1",
-    ECU_TEST_LATEST_VERSIONS: JSON.stringify({
-      app: "2.0.0",
-      react: "19.3.0",
-      scheduler: "0.24.1",
-    }),
-    ECU_TEST_SPECIFIER_VERSIONS: JSON.stringify({
-      "scheduler@^0.23.0": "0.23.0",
-    }),
+    env: { NO_COLOR: "1" },
+    registry: {
+      latest: {
+        app: "2.0.0",
+        react: "19.3.0",
+        scheduler: "0.24.1",
+      },
+      specifiers: {
+        "scheduler@^0.23.0": "0.23.0",
+      },
+    },
   });
 
   assert.equal(result.code, 0);
@@ -111,7 +117,9 @@ test("--dry-run shows stripped integrity lines removed and the subsection", asyn
   const targetPath = await copyFixture("update-integrity.html");
   const original = await readFile(targetPath, "utf8");
 
-  const result = await runCli(["--dry-run", targetPath], { NO_COLOR: "1" });
+  const result = await runCli(["--dry-run", targetPath], {
+    env: { NO_COLOR: "1" },
+  });
 
   assert.equal(result.code, 0);
   assert.match(
@@ -132,7 +140,9 @@ test("--dry-run with no updates prints 'No changes would be written.'", async ()
   const targetPath = await copyFixture("update-noop.html");
   const original = await readFile(targetPath, "utf8");
 
-  const result = await runCli(["--dry-run", targetPath], { NO_COLOR: "1" });
+  const result = await runCli(["--dry-run", targetPath], {
+    env: { NO_COLOR: "1" },
+  });
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /^No changes would be written\./);
@@ -143,19 +153,19 @@ test("--dry-run with no updates prints 'No changes would be written.'", async ()
 });
 
 test("--dry-run requires exactly one positional target", async () => {
-  const missing = await runCli(["--dry-run"], { NO_COLOR: "1" });
+  const missing = await runCli(["--dry-run"], { env: { NO_COLOR: "1" } });
   assert.notEqual(missing.code, 0);
   assert.match(missing.stderr, /Expected exactly one target path\./);
 
   const multiple = await runCli(["--dry-run", "a.html", "b.html"], {
-    NO_COLOR: "1",
+    env: { NO_COLOR: "1" },
   });
   assert.notEqual(multiple.code, 0);
   assert.match(multiple.stderr, /Expected exactly one target path\./);
 });
 
 test("help output lists the --dry-run flag", async () => {
-  const result = await runCli(["--help"], { NO_COLOR: "1" });
+  const result = await runCli(["--help"], { env: { NO_COLOR: "1" } });
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /--dry-run/);

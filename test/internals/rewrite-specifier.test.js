@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { rewriteSpecifier } from "../src/index.js";
+import { rewriteSpecifier } from "../../src/index.js";
 
 test("pinned bumps concrete version", () => {
   assert.equal(rewriteSpecifier("", "19.3.0"), "19.3.0");

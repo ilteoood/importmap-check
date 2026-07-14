@@ -7,6 +7,7 @@ import {
 } from "./parse-cdn-url.js";
 import {
   compareVersions,
+  DEFAULT_REGISTRY_URL,
   defaultResolveLatestVersion,
   defaultResolveSpecifier,
 } from "./resolve-version.js";
@@ -206,9 +207,18 @@ const buildPackageSources = (occurrences) => {
 };
 
 export const analyzeTarget = async (targetPath, options = {}) => {
+  // Registry access is threaded through as a base URL (default npm). The
+  // function-injection hooks remain available for advanced callers, but the
+  // base-URL seam is what the CLI and the test mock registry use.
+  const registryBaseUrl = options.registryBaseUrl ?? DEFAULT_REGISTRY_URL;
   const resolveLatestVersion =
-    options.resolveLatestVersion ?? defaultResolveLatestVersion;
-  const resolveSpecifier = options.resolveSpecifier ?? defaultResolveSpecifier;
+    options.resolveLatestVersion ??
+    ((packageName) =>
+      defaultResolveLatestVersion(packageName, registryBaseUrl));
+  const resolveSpecifier =
+    options.resolveSpecifier ??
+    ((packageName, specifier) =>
+      defaultResolveSpecifier(packageName, specifier, registryBaseUrl));
   const withSources = options.withSources ?? false;
   const importMaps = await loadImportMaps(targetPath);
   const { normalizedEntries, warnings: normalizationWarnings } =

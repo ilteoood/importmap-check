@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveSemverRange } from "../src/index.js";
+import { resolveSemverRange } from "../../src/index.js";
 
 // Synthetic npm registry body used to exercise resolveSemverRange without
 // hitting the network. The `versions` map lists stable releases (no
