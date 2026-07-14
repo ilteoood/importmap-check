@@ -1,84 +1,61 @@
-# Rebuild Contract & API Guide
+# Reference Implementation Notes & Internal API
 
-This document, together with `openspec/specs/`, is the input for rebuilding
-`esm-check-updates` from scratch. It separates the **frozen contract** every
-rebuild must satisfy (Tier 1) from an **advisory decomposition guide** a rebuild
-may adopt or reinvent (Tier 2).
+This document describes the **current reference implementation** of
+`esm-check-updates`. It is **reference documentation, not a rebuild input.**
 
-The portable behavioral baseline lives in `test/api/` and `test/cli/`. Those
-tests bind only to Tier 1. `test/internals/` binds to Tier 2 and is expected to
-be rewritten per rebuild.
+The observable contract a rebuild must satisfy lives entirely in
+`openspec/specs/` — a spec-driven rebuild is derived from `openspec/specs/`
+**alone** (no tests, and not this file).
 
-Rip-out set for the experiment: `openspec/changes/archive`, `src/`, `test/`.
-Survivors (rebuild inputs): `openspec/specs/`, this file, `README.md`,
-`package.json`, and the portable baseline tests. `bin/` is a thin adapter over
-the Tier-1 verbs; a rebuild may keep it as-is or regenerate it.
+Why this file is not a rebuild input: the "Reference internals" section below
+records the reference implementation's internal decomposition (module layout,
+helper functions, data-model internals). Feeding that to a rebuild would anchor
+an independent derivation to the reference's structure and defeat the point of
+building and comparing rebuilds. Keep it for human understanding of the
+reference branch only.
 
----
+## Enforcement without shipping tests
 
-## Tier 1 — Frozen contract (a rebuild MUST satisfy)
+The portable behavioral tests stay on the reference branch and are run **against
+a finished rebuild** to check it against the contract — they are not handed to
+the rebuild as inputs:
 
-### CLI surface (`bin/esm-check-updates.js`)
+- `test/api/` — asserts the `library-api` verb contract (`check` / `preview` /
+  `update` and their `{ output, data }` shape) in-process.
+- `test/cli/` — asserts the CLI surface as a black box.
+- `test/helpers/` (mock registry + CLI runner) and `test/fixtures/` are the
+  shared infrastructure those two buckets need.
 
-- Invocation: `esm-check-updates [options] <target-path>` with exactly one
-  positional target path.
-- Flags: `-h, --help`; `-v, --version`; `--sources`; `--width <n>` (integer,
-  `>= 40`, only meaningful with `--sources`); `-u, --update`; `--dry-run`.
-  `--dry-run` takes precedence over `--update` (never writes).
-- Target types: `.json` import map, `.html`/`.htm` with inline
-  `<script type="importmap">`.
-- Streams & exit codes: human-readable report → `stdout`; invalid invocation and
-  fatal errors → `stderr`. Exit `0` on success (including "updates found" and
-  "no updates"); non-zero on invalid args, missing/unreadable/unsupported
-  target, or fatal error.
-- `--version` prints `package.json`'s `version` (never hard-code it).
-- Registry override: `ECU_REGISTRY_URL` selects the npm registry base URL
-  (default `https://registry.npmjs.org`). This is a real configuration knob
-  (private registries) and the seam the test suite uses to point at a mock
-  registry — it is NOT a test-only hook baked into library code.
-- Output section names (when present): `Updates`, `Current`, `Warnings`,
-  `Lookup Failures`, `Notes`, `Stripped integrity entries`. Report columns:
-  `Package`, `Resolved`, `Latest`, and `Source` (with `--sources`).
-  **Exact spacing, column widths, delimiters, and prose wording are NOT frozen**
-  (see `openspec/specs/reporting` Non-Goals). The baseline asserts values,
-  section presence, and behavior — not formatting.
+`test/internals/` binds to the reference's internal decomposition and is
+rewritten per rebuild — it is not part of the portable oracle.
 
-### Library verbs (`src/index.js`) — the minimum, not-CLI-aware API
+## Observable contract → `openspec/specs/`
 
-Each verb takes a target path plus plain options and returns `{ output, data }`,
-where `output` is the rendered human-readable string (reporting is a library
-concern) and `data` is the structured result. Verbs do no argv parsing, no
-`process.exit`, and no TTY sniffing; the caller supplies `colorEnabled` and the
-effective report `width`. Fatal conditions throw an `Error` whose `.exitCode`
-the caller may honor.
+The frozen, observable contract is specified as OpenSpec capabilities:
 
-```
-check(targetPath, {
-  sources?: boolean,          // render the Source column
-  width?: number,             // available width for width-aware rendering
-  colorEnabled?: boolean,     // default false
-  registryBaseUrl?: string,   // default https://registry.npmjs.org
-}) => Promise<{ output: string, data: Report }>
+| Concern                                                                                    | Capability             |
+| ------------------------------------------------------------------------------------------ | ---------------------- |
+| CLI surface (flags, exit codes, streams, sections)                                         | `cli`, `cli-bootstrap` |
+| Library verbs (`check`/`preview`/`update`, `{ output, data }`, options, `registryBaseUrl`) | `library-api`          |
+| Import-map parsing                                                                         | `importmap-input`      |
+| Package/version resolution                                                                 | `package-resolution`   |
+| Human-readable output                                                                      | `reporting`            |
+| In-place rewrite behavior                                                                  | `update-mode`          |
 
-preview(targetPath, {         // dry-run: plan + diff, writes nothing
-  colorEnabled?: boolean,
-  registryBaseUrl?: string,
-}) => Promise<{ output: string, data: { report: Report, plan: Plan } }>
-
-update(targetPath, {          // rewrites the target file atomically
-  colorEnabled?: boolean,
-  registryBaseUrl?: string,
-}) => Promise<{ output: string, data: { report: Report, plan: Plan } }>
-```
+The `library-api` capability is what makes `test/api/` runnable against a
+rebuild: it fixes the verb names, the `{ output, data }` return shape, and the
+`data` fields those tests assert on. The CLI registry override is
+`ECU_REGISTRY_URL` (default `https://registry.npmjs.org`), the seam the mock
+registry uses.
 
 ---
 
-## Tier 2 — Advisory decomposition guide (non-binding)
+## Reference internals (NOT a rebuild input)
 
-These are the internal helpers and data models the reference implementation uses.
-They encode hard-won semantics (npm semver locking, `?deps=` splicing, unified
-diff). A rebuild may adopt this decomposition, restructure it, or replace it —
-`test/internals/` is rewritten to match whatever a rebuild chooses.
+The following records how the reference implementation is decomposed. It is
+advisory context for humans reading the reference branch — a rebuild may use a
+completely different structure, and `test/internals/` is rewritten to match
+whatever it chooses. **Do not feed this section to a spec-driven rebuild.**
 
 ### Internal functions
 
@@ -103,13 +80,17 @@ renderUnifiedDiff(originalContent, updatedContent, filePath, { colorEnabled? }) 
 
 ### Data models
 
+`Report` and `Plan` are the observable `data` payloads (their shape is fixed by
+the `library-api` capability); the internal fields not asserted by `test/api`
+(`allOccurrences`, `originalContent`, `updatedContent`) are reference detail.
+
 ```
 Report {
   packageResults: PackageResult[],   // sorted by packageName
   warnings: { type: string, message: string }[],
   notes: { message: string }[],
   lookupFailures: { packageName: string, message: string }[],
-  allOccurrences: Occurrence[],
+  allOccurrences: Occurrence[],      // reference detail
   targetPath: string,
 }
 
@@ -127,32 +108,15 @@ Plan {
   noChanges: boolean,
   rewrites: { packageName, currentVersion, latestVersion, oldSpecifier, newSpecifier }[],
   strippedIntegrityEntries: { url, packageName, message }[],
-  originalContent: string | null,    // null when noChanges
-  updatedContent: string | null,     // null when noChanges
+  originalContent: string | null,    // reference detail (null when noChanges)
+  updatedContent: string | null,     // reference detail (null when noChanges)
   targetPath: string,
   warnings, notes, lookupFailures,   // carried from Report (+ integrity-strip warnings)
 }
 ```
 
----
-
-## Test layering
-
-| Bucket            | Layer             | Binds to             | Portable across rebuilds?  |
-| ----------------- | ----------------- | -------------------- | -------------------------- |
-| `test/internals/` | 1 — internals     | Tier 2 signatures    | No — rewritten per rebuild |
-| `test/api/`       | 2 — library verbs | Tier 1 verb contract | Yes                        |
-| `test/cli/`       | 3 — CLI adapter   | Tier 1 CLI surface   | Yes                        |
-
-Shared test infrastructure (survives with the baseline):
-
-- `test/helpers/mock-registry.js` — a local HTTP npm-registry stand-in
-  (`startMockRegistry`, `packument`, `packumentsFromMaps`). Code under test
-  reaches it through `registryBaseUrl` / `ECU_REGISTRY_URL`; no test hook is
-  compiled into library code.
-- `test/helpers/cli.js` — spawns the CLI against a fresh mock registry per run
-  (`runCli(args, { env, registry })`) and manages fixture temp dirs.
-- `test/fixtures/importmaps/` — import map JSON and inline-HTML fixtures.
-
-Run the portable baseline against any rebuild with `npm run test:baseline`;
-run the decomposition-specific tests with `npm run test:internals`.
+Shared test infrastructure: `test/helpers/mock-registry.js`
+(`startMockRegistry`, `packument`, `packumentsFromMaps`), `test/helpers/cli.js`
+(`runCli`), and `test/fixtures/importmaps/`. Run the portable oracle against a
+rebuild with `npm run test:baseline`; run the decomposition-specific tests with
+`npm run test:internals`.
