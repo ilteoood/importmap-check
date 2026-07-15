@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the import map input surface that `esm-check-updates` is required to understand.
+Define the import map input surface that `importmap-check` is required to understand.
 
 ## Requirements
 

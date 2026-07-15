@@ -1,7 +1,7 @@
 import { MAJOR_SELECTOR_PATTERN, MINOR_SELECTOR_PATTERN } from "../semver.js";
 
 // Default npm registry base URL. Callers may override this (see the CLI's
-// ECU_REGISTRY_URL knob) to point at a private registry or, in tests, a local
+// IMPORTMAP_CHECK_REGISTRY_URL knob) to point at a private registry or, in tests, a local
 // mock registry — keeping registry access an explicit dependency rather than a
 // hard-coded host.
 export const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the minimal, not-CLI-aware library API surface that `esm-check-updates`
+Define the minimal, not-CLI-aware library API surface that `importmap-check`
 exposes for programmatic use and that the CLI is built on. This is the
 observable contract for the package's main module: the verb entry points, their
 options, and the shape of the structured result they return. It deliberately

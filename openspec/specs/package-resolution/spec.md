@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define how `esm-check-updates` identifies updateable packages from supported CDN-backed import map entries.
+Define how `importmap-check` identifies updateable packages from supported CDN-backed import map entries.
 ## Requirements
 ### Requirement: Supported CDN Families
 The system SHALL support `esm.sh` and `jsdelivr` CDN URL families.

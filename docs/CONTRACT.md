@@ -1,7 +1,7 @@
 # Reference Implementation Notes & Internal API
 
 This document describes the **current reference implementation** of
-`esm-check-updates`. It is **reference documentation, not a rebuild input.**
+`importmap-check`. It is **reference documentation, not a rebuild input.**
 
 The observable contract a rebuild must satisfy lives entirely in
 `openspec/specs/` — a spec-driven rebuild is derived from `openspec/specs/`
@@ -45,7 +45,7 @@ The frozen, observable contract is specified as OpenSpec capabilities:
 The `library-api` capability is what makes `test/api/` runnable against a
 rebuild: it fixes the verb names, the `{ output, data }` return shape, and the
 `data` fields those tests assert on. The CLI registry override is
-`ECU_REGISTRY_URL` (default `https://registry.npmjs.org`), the seam the mock
+`IMPORTMAP_CHECK_REGISTRY_URL` (default `https://registry.npmjs.org`), the seam the mock
 registry uses.
 
 ---

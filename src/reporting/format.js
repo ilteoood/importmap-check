@@ -442,7 +442,7 @@ export const formatReport = (report, options = {}) => {
   const availableWidth = sourcesEnabled
     ? resolveAvailableWidth(options)
     : undefined;
-  const lines = ["esm-check-updates", `Target: ${report.targetPath}`];
+  const lines = ["importmap-check", `Target: ${report.targetPath}`];
   const updates = report.packageResults.filter((result) => result.hasUpdate);
   const updateLines = [];
 

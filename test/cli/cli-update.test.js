@@ -507,7 +507,9 @@ test("--update does not leave temp files behind on write failure", async () => {
     await runCli(["--update", targetPath], { env: { NO_COLOR: "1" } });
     const { readdir } = await import("node:fs/promises");
     const remaining = await readdir(dir);
-    const tempFiles = remaining.filter((name) => name.includes(".ecu-"));
+    const tempFiles = remaining.filter((name) =>
+      name.includes(".importmap-check-"),
+    );
     assert.equal(tempFiles.length, 0, `unexpected temp files: ${tempFiles}`);
   } finally {
     await chmod(dir, dirStats.mode);

@@ -1,10 +1,10 @@
-# esm-check-updates
+# importmap-check
 
 Dependency checker/updater for ESM dependencies from common CDNs.
 
 ## Overview
 
-ECU reads your ESM import maps and identifies dependency versions and available upgrades. The default invocation is check-only: it analyzes targets and reports findings without modifying files. Pass `--update` / `-u` to rewrite updateable entries in place.
+importmap-check reads your ESM import maps and identifies dependency versions and available upgrades. The default invocation is check-only: it analyzes targets and reports findings without modifying files. Pass `--update` / `-u` to rewrite updateable entries in place.
 
 Features:
 
@@ -16,19 +16,19 @@ Features:
 Run it on demand with `npx`:
 
 ```sh
-$ npx esm-check-updates <target-path>
+$ npx importmap-check <target-path>
 ```
 
 Or install it globally:
 
 ```sh
-$ npm install --global esm-check-updates
+$ npm install --global importmap-check
 ```
 
 ## Usage
 
 ```sh
-$ esm-check-updates [options] <target-path>
+$ importmap-check [options] <target-path>
 ```
 
 Options:
@@ -40,14 +40,14 @@ Options:
 
 Environment:
 
-- `ECU_REGISTRY_URL` — Base URL of the npm registry used to resolve versions and dist-tags. Defaults to `https://registry.npmjs.org`. Point it at a private registry mirror if needed.
+- `IMPORTMAP_CHECK_REGISTRY_URL` — Base URL of the npm registry used to resolve versions and dist-tags. Defaults to `https://registry.npmjs.org`. Point it at a private registry mirror if needed.
 
 Supported target types:
 
 - Standalone import map JSON files
 - HTML files with one or more inline `<script type="importmap">` blocks
 
-What ECU analyzes:
+What importmap-check analyzes:
 
 - Parses import map `imports` entries from JSON and inline HTML
 - Supports package-style keys and remap-style URL/path keys
@@ -58,23 +58,23 @@ What ECU analyzes:
 ## Update Mode
 
 ```sh
-$ esm-check-updates --update [options] <target-path>
+$ importmap-check --update [options] <target-path>
 ```
 
 `--update` / `-u` rewrites updateable import map entries in the target file in place and prints a post-rewrite summary to stdout describing what changed. The default target is the npm registry's `latest` dist-tag.
 
-> ⚠️ **Make sure your target file is in version control and all changes are committed before running `--update`**, or preview the exact edits first with `--dry-run` (see **Previewing changes** below). ECU does not snapshot before writing; the atomic write step protects against interrupted writes but not against losing work you hadn't committed.
+> ⚠️ **Make sure your target file is in version control and all changes are committed before running `--update`**, or preview the exact edits first with `--dry-run` (see **Previewing changes** below). importmap-check does not snapshot before writing; the atomic write step protects against interrupted writes but not against losing work you hadn't committed.
 
 ### Previewing changes with `--dry-run`
 
 ```sh
-$ esm-check-updates --dry-run <target-path>
+$ importmap-check --dry-run <target-path>
 ```
 
 `--dry-run` computes the same rewrite plan `--update` would apply and prints it as a unified line diff, **without writing the target file**. It is usable on its own, and when combined with `--update` the dry run wins — no file is written either way.
 
 ```bash
-$ esm-check-updates --dry-run ./public/index.html
+$ importmap-check --dry-run ./public/index.html
 Dry run — no files written.
 
 --- ./public/index.html
@@ -92,7 +92,7 @@ Because the diff is computed from the bytes `--update` would write, integrity en
 
 ### Rewrite behavior by specifier class
 
-ECU preserves the specifier style you wrote. The exact rewrite depends on the specifier class:
+importmap-check preserves the specifier style you wrote. The exact rewrite depends on the specifier class:
 
 | Specifier class     | Example         | When `--update` finds an update, the entry becomes                                                         |
 | ------------------- | --------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -125,14 +125,14 @@ If the analyzer produces informational notes about dist-tag entries during check
 
 ### Integrity entries are stripped, not regenerated
 
-When `--update` rewrites a URL that has a corresponding entry in the import map's `integrity` section, ECU **strips** that integrity entry and emits a hard warning:
+When `--update` rewrites a URL that has a corresponding entry in the import map's `integrity` section, importmap-check **strips** that integrity entry and emits a hard warning:
 
 ```
 ## Stripped integrity entries
 - https://esm.sh/react@19.3.0 (triggered by react)
 ```
 
-Stripped entries are **not regenerated** in this version. SRI hashes are author-time commitments to specific bytes the browser will fetch; computing a replacement hash requires fetching the new URL's body and matching the request-shaping a browser would use, which has documented edge cases around brotli/gzip encodings and esm.sh's user-agent-sensitive build-target selection. Rather than ship brittle regeneration silently, ECU leaves re-pinning to you: validate the new URL in a browser, then re-add the SRI hash manually.
+Stripped entries are **not regenerated** in this version. SRI hashes are author-time commitments to specific bytes the browser will fetch; computing a replacement hash requires fetching the new URL's body and matching the request-shaping a browser would use, which has documented edge cases around brotli/gzip encodings and esm.sh's user-agent-sensitive build-target selection. Rather than ship brittle regeneration silently, importmap-check leaves re-pinning to you: validate the new URL in a browser, then re-add the SRI hash manually.
 
 A future change will add `--regenerate-integrity` (with a `--no-regenerate-integrity` opt-out) once the browser-vs-CLI byte-stability question has been empirically validated.
 
@@ -140,7 +140,7 @@ A future change will add `--regenerate-integrity` (with a `--no-regenerate-integ
 
 esm.sh URLs may carry a `?deps=react@18,react-dom@19.2.3` query string pinning dependency versions. `--update` rewrites updateable dependency pins the same way it rewrites the outer package: each pin's specifier class (pinned, caret, tilde, major-only, minor-only) is resolved and lifted per the same rules in the table above. Dist-tag dependency pins (e.g. `?deps=react@beta`) are left floating, matching outer dist-tag behavior.
 
-Dependency pins are rewritten by splicing the individual dependency token in place — the query string's dependency order, separators, and per-token encoding are preserved. ECU never re-serializes the query string through a URL parser, so a rewrite touches only the version tokens that actually change (keeping the diff minimal and avoiding the `+`→space decoding a round-trip would introduce).
+Dependency pins are rewritten by splicing the individual dependency token in place — the query string's dependency order, separators, and per-token encoding are preserved. importmap-check never re-serializes the query string through a URL parser, so a rewrite touches only the version tokens that actually change (keeping the diff minimal and avoiding the `+`→space decoding a round-trip would introduce).
 
 When a single URL needs several edits at once — an outer version bump plus one or more dependency-pin bumps — all edits are coalesced into one rewrite, so no edit overwrites another:
 
@@ -157,13 +157,13 @@ Encoded separators between dependencies (a `%2C` in place of the literal `,` esm
 
 ### Resolution tightening (check-only behavior change)
 
-This change also tightens ECU's existing range-resolution logic for `^0.x.y` and `~0.0.z` specifiers in check-only mode. Previously, `^0.2.3` was treated as `^0` (resolved to the highest 0.x version published), and `~0.0.3` was treated as `~0.0`. Both were looser than npm's strict semver rules.
+This change also tightens importmap-check's existing range-resolution logic for `^0.x.y` and `~0.0.z` specifiers in check-only mode. Previously, `^0.2.3` was treated as `^0` (resolved to the highest 0.x version published), and `~0.0.3` was treated as `~0.0`. Both were looser than npm's strict semver rules.
 
-Going forward, `^0.2.3` resolves to the highest 0.2.x version, and `^0.0.3` resolves to the highest 0.0.x version — matching what esm.sh itself serves at request time. This may change the `Resolved` value ECU reports for some import map entries versus prior versions of the tool. The previous values were reflecting looser-than-npm semantics; the new values reflect what the CDN actually serves.
+Going forward, `^0.2.3` resolves to the highest 0.2.x version, and `^0.0.3` resolves to the highest 0.0.x version — matching what esm.sh itself serves at request time. This may change the `Resolved` value importmap-check reports for some import map entries versus prior versions of the tool. The previous values were reflecting looser-than-npm semantics; the new values reflect what the CDN actually serves.
 
 ### Single target, single invocation
 
-ECU operates on exactly one target path per invocation. Multi-target scanning and `--filter`/`--reject` (per-package targeting) are deferred to future changes. `--update` rewrites every updateable entry in the file; to apply updates selectively, use version control to revert unwanted changes after the write, or wait for the `--filter` / `--interactive` follow-up changes.
+importmap-check operates on exactly one target path per invocation. Multi-target scanning and `--filter`/`--reject` (per-package targeting) are deferred to future changes. `--update` rewrites every updateable entry in the file; to apply updates selectively, use version control to revert unwanted changes after the write, or wait for the `--filter` / `--interactive` follow-up changes.
 
 ### Atomic write
 
@@ -177,7 +177,7 @@ ECU operates on exactly one target path per invocation. Multi-target scanning an
 ## Example Output
 
 ```bash
-$ esm-check-updates
+$ importmap-check
 Target: ./public/index.html
 
 ## Updates
@@ -193,7 +193,7 @@ react-dom  19.2.3    19.3.0
 ## Example: Update Mode
 
 ```bash
-$ esm-check-updates --update ./public/index.html
+$ importmap-check --update ./public/index.html
 Updated ./public/index.html:
 
   react         19.2.3 → 19.3.0
@@ -209,4 +209,4 @@ Updated ./public/index.html:
 - typescript has import map integrity metadata tied to a URL that would need review if updated.
 ```
 
-Run `esm-check-updates --update` again against the same file with stable `latest` dist-tags and you'll see `No changes to write` — the update is idempotent until the npm registry's `latest` moves.
+Run `importmap-check --update` again against the same file with stable `latest` dist-tags and you'll see `No changes to write` — the update is idempotent until the npm registry's `latest` moves.

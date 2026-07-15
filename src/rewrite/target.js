@@ -335,7 +335,7 @@ export const commitTargetRewrite = async (targetPath, plan) => {
   const originalStat = await stat(targetPath);
   const tempPath = path.join(
     path.dirname(targetPath),
-    `.${path.basename(targetPath)}.ecu-${process.pid}-${Math.random().toString(36).slice(2)}.tmp`,
+    `.${path.basename(targetPath)}.importmap-check-${process.pid}-${Math.random().toString(36).slice(2)}.tmp`,
   );
 
   try {

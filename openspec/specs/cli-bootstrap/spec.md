@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the bootstrap CLI behavior for `esm-check-updates` before deeper import map analysis support exists.
+Define the bootstrap CLI behavior for `importmap-check` before deeper import map analysis support exists.
 
 ## Requirements
 
@@ -11,7 +11,7 @@ The system SHALL provide a bootstrap CLI implementation that fully handles comma
 
 #### Scenario: bootstrap CLI code is implemented
 - **WHEN** the system implements bootstrap CLI parsing, dispatch, help text, or target preflight validation
-- **THEN** that CLI-facing logic lives in the published `bin/esm-check-updates.js` entrypoint
+- **THEN** that CLI-facing logic lives in the published `bin/importmap-check.js` entrypoint
 - **AND** `src/` remains reserved for ESM and import map functional code rather than command-line orchestration
 
 #### Scenario: supported informational flag is provided

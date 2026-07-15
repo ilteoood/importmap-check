@@ -65,7 +65,7 @@ This file is **not** a spec. It does not describe what the system does today. It
 
 **Reasoning:**
 - ncu's `--filter` and `--reject` flags accept strings, wildcards, globs, comma- or space-delimited lists, and regex (`/^react-.+$/`). Multiple instances of each flag union. `--filter` narrows then `--reject` removes.
-- For `esm-check-updates` this is the granularity mechanism for non-interactive mode: filter the package set to update, leaving unfiltered packages untouched.
+- For `importmap-check` this is the granularity mechanism for non-interactive mode: filter the package set to update, leaving unfiltered packages untouched.
 - Composes cleanly with every other flag (`--target`, `--pin`, `--pin-channel`). All update-affecting flags apply only to filtered packages when `--filter` is set.
 - Without `--filter`, the granularity mechanism is `--interactive` (see §4).
 
@@ -89,7 +89,7 @@ This file is **not** a spec. It does not describe what the system does today. It
 
 **Reasoning:**
 - ncu ships a TUI multi-select built on inquirer. Hotkeys: ↑↓ select, space toggle, `a` toggle all, enter proceed.
-- For esm-check-updates the natural place to land this is full ncu-style multi-select *with* an `a` toggle-all key. Per-package override of `--pin`/`--pin-channel`/`--target` via inline keybindings (`p` toggle pin, `c` toggle pin-channel) is a possible later extension.
+- For importmap-check the natural place to land this is full ncu-style multi-select *with* an `a` toggle-all key. Per-package override of `--pin`/`--pin-channel`/`--target` via inline keybindings (`p` toggle pin, `c` toggle pin-channel) is a possible later extension.
 - `--interactive` implies `--update` per ncu convention.
 - Non-TTY environment: error out and suggest `--dry-run`.
 
@@ -148,7 +148,7 @@ This file is **not** a spec. It does not describe what the system does today. It
 **Open design questions for a future change:**
 - Default state: regenerate-by-default with `--no-regenerate-integrity` opt-out, or strip-and-warn-by-default with `--regenerate-integrity` opt-in? Reasoning leans regenerate-by-default once we trust the byte-stability.
 - Empirical spike: actually `fetch` a few esm.sh URLs with browser-shaped vs CLI-shaped Accept headers and compare hashes. If they match across a few test packages, default-to-regenerate is safe.
-- Specify the request headers ecu sends when fetching for SRI computation — `Accept-Encoding: identity` and explicit `User-Agent: esm-check-updates/...` are likely candidates. Document this as a portable assumption.
+- Specify the request headers importmap-check sends when fetching for SRI computation — `Accept-Encoding: identity` and explicit `User-Agent: importmap-check/...` are likely candidates. Document this as a portable assumption.
 - Handle multi-`integrity`-algo entries (e.g. `integrity: { url: "sha256-... sha384-..." }`) — recompute for each algorithm the original entry had.
 - Handle SRI refresh across `?deps=` rewriting once that lands, since deps URLs may also have integrity entries.
 
@@ -200,7 +200,7 @@ This file is **not** a spec. It does not describe what the system does today. It
 
 **Origin:** Listed as a Non-Goal in the existing `importmap-input` spec.
 
-**Question:** Should `esm-check-updates` analyze `scopes` branches of import maps, not just top-level `imports`?
+**Question:** Should `importmap-check` analyze `scopes` branches of import maps, not just top-level `imports`?
 
 **Reasoning:**
 - Today the analyzer warns that `scopes` are not yet supported and continues processing `imports`. `importmap-input` spec captures this as the `Scopes Handling` requirement.
@@ -225,7 +225,7 @@ This file is **not** a spec. It does not describe what the system does today. It
 
 **Reasoning:**
 - ncu's `--packageFile` accepts a glob, with `--deep` for recursive scan.
-- For esm-check-updates this would change the single-positional-arg contract to a glob-or-directory contract and aggregate analysis+rewrite across multiple files.
+- For importmap-check this would change the single-positional-arg contract to a glob-or-directory contract and aggregate analysis+rewrite across multiple files.
 - Update mode under multi-target would write each file independently and produce a per-file summary plus an aggregate count at the end.
 
 **Deferred because:** Single-target is simpler and covers the listed v1 cases (one HTML/JSON import map at a time). Multi-target introduces aggregation concerns across targets.
@@ -263,11 +263,11 @@ This file is **not** a spec. It does not describe what the system does today. It
 
 **Origin:** Listed as an Open Question in the existing `cli` spec.
 
-**Question:** Should `esm-check-updates` return a non-zero exit code when updates are available (for CI gate usage)?
+**Question:** Should `importmap-check` return a non-zero exit code when updates are available (for CI gate usage)?
 
 **Reasoning:**
 - ncu's `--errorLevel 2` makes "no updates" a CI failure; the absence of updates is a CI success.
-- For esm-check-updates the natural mapping is: check-only + `--error-level updates-available` exits non-zero when `hasUpdate` is true for any package (gate fails when updates are needed).
+- For importmap-check the natural mapping is: check-only + `--error-level updates-available` exits non-zero when `hasUpdate` is true for any package (gate fails when updates are needed).
 - Combined with future `--json` output (§11) this lets CI scripts integrate via either exit code or parsed output.
 
 **Deferred because:** No CI consumer has been articulated. Default exit 0 on successful analysis (whether or not updates are found) is fine for human use.
@@ -303,11 +303,11 @@ This file is **not** a spec. It does not describe what the system does today. It
 
 **Origin:** Listed as an Open Question in the existing `cli` spec.
 
-**Question:** Should `esm-check-updates` support auto-discovery of the target file when no positional path is provided?
+**Question:** Should `importmap-check` support auto-discovery of the target file when no positional path is provided?
 
 **Reasoning:**
 - ncu defaults to `./package.json` if not specified.
-- ECU has no canonical target file. Candidates vary by project: `index.html`, `importmap.json`, `public/index.html`, `src/importmap.json`, etc.
+- importmap-check has no canonical target file. Candidates vary by project: `index.html`, `importmap.json`, `public/index.html`, `src/importmap.json`, etc.
 - Auto-discovery introduces predictable-by-cwd-but-unpredictable-globally behavior, which is a footgun.
 
 **Deferred because:** Single-target, explicit-positional-arg is the simplest contract. Auto-discovery is convenience for the user not paying attention to their target.
@@ -323,7 +323,7 @@ This file is **not** a spec. It does not describe what the system does today. It
 
 **Origin:** Surfaced while extending `implement-update-mode` to cover the full caret/tilde matrix for `0.0.x` and tilde-cross-minor cases.
 
-**Question:** Should ECU support partial specifier shapes (`^1.2`, `^1`, `~1`, `~0`) and OR-ranges (`1.2.3 || 1.5.0`), and how should it resolve/rewrite them?
+**Question:** Should importmap-check support partial specifier shapes (`^1.2`, `^1`, `~1`, `~0`) and OR-ranges (`1.2.3 || 1.5.0`), and how should it resolve/rewrite them?
 
 **Reasoning:**
 - npm's `node-semver` accepts partial shapes (`^1.2` = `>=1.2.0 <2.0.0`, `^1` = `>=1.0.0 <2.0.0`, `~1` = `>=1.0.0 <2.0.0`, `~0` = `>=0.0.0 <1.0.0`). esm.sh generally rejects these in URL paths (URLs need the concrete pin or dist-tag), but they can appear in `?deps=` query strings.

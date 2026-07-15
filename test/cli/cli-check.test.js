@@ -16,7 +16,7 @@ test("prints help with --help", async () => {
   assert.equal(result.code, 0);
   assert.match(
     result.stdout,
-    /Usage: esm-check-updates \[options\] <target-path>/,
+    /Usage: importmap-check \[options\] <target-path>/,
   );
   assert.match(result.stdout, /check-only/i);
   assert.match(result.stdout, /--sources/);
@@ -112,7 +112,7 @@ test("analyzes a valid json import map", async () => {
   const result = await runCli([targetPath], { env: { NO_COLOR: "1" } });
 
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /esm-check-updates/);
+  assert.match(result.stdout, /importmap-check/);
   assert.match(result.stdout, /## Updates/);
   assert.match(result.stdout, /Package[^\n]*Resolved[^\n]*Latest/);
   assert.match(result.stdout, /react[^\n]*19\.2\.3[^\n]*19\.3\.0/);

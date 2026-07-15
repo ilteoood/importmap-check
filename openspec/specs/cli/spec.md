@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Define the user-facing command contract for `esm-check-updates`.
+Define the user-facing command contract for `importmap-check`.
 
 ## Requirements
 
 ### Requirement: Single-Command Invocation
-The system SHALL expose a single-command CLI invoked as `esm-check-updates <target-path>`.
+The system SHALL expose a single-command CLI invoked as `importmap-check <target-path>`.
 
 #### Scenario: One target path is provided
-- **WHEN** the user runs `esm-check-updates <target-path>`
+- **WHEN** the user runs `importmap-check <target-path>`
 - **THEN** the system analyzes the referenced target file
 - **AND** the system treats that file as the only target for the invocation
 
@@ -187,7 +187,7 @@ The system SHALL keep command-line orchestration in the published bin entrypoint
 
 #### Scenario: bootstrap CLI behavior is implemented
 - **WHEN** argument parsing, help/version handling, exit code management, or target-path preflight validation is added or changed
-- **THEN** that behavior is implemented in `bin/esm-check-updates.js`
+- **THEN** that behavior is implemented in `bin/importmap-check.js`
 - **AND** `src/` is not used as the home for command-line orchestration
 
 ### Requirement: Exit Code Semantics

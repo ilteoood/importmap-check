@@ -14,7 +14,7 @@ const fixturesRoot = path.join(
 );
 
 // Every CLI run resolves versions against a local mock registry (never the real
-// npm registry) via the CLI's ECU_REGISTRY_URL knob. react/react-dom default to
+// npm registry) via the CLI's IMPORTMAP_CHECK_REGISTRY_URL knob. react/react-dom default to
 // latest 19.3.0; callers extend or override through `registry` (see below).
 const DEFAULT_LATEST = { react: "19.3.0", "react-dom": "19.3.0" };
 
@@ -24,7 +24,9 @@ const createFixtureRegistry = () => {
   const fixtures = [];
 
   const createFixtureDir = async () => {
-    const fixtureDir = await mkdtemp(path.join(os.tmpdir(), "ecu-cli-"));
+    const fixtureDir = await mkdtemp(
+      path.join(os.tmpdir(), "importmap-check-cli-"),
+    );
     fixtures.push(fixtureDir);
 
     return fixtureDir;
@@ -72,7 +74,7 @@ const runCli = async (args, { env = {}, registry = {} } = {}) => {
   // the child's stderr clean and color deterministic.
   const childEnv = {
     ...process.env,
-    ECU_REGISTRY_URL: mock.url,
+    IMPORTMAP_CHECK_REGISTRY_URL: mock.url,
     ...env,
   };
   delete childEnv.FORCE_COLOR;
@@ -81,7 +83,7 @@ const runCli = async (args, { env = {}, registry = {} } = {}) => {
     return await new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        ["bin/esm-check-updates.js", ...args],
+        ["bin/importmap-check.js", ...args],
         {
           cwd: repoRoot,
           env: childEnv,

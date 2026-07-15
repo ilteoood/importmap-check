@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 
 // Local, implementation-neutral stand-in for the npm registry used by the test
 // suite. It serves packument JSON over HTTP so that code under test exercises
-// its real registry-fetch path (via the `registryBaseUrl` / `ECU_REGISTRY_URL`
+// its real registry-fetch path (via the `registryBaseUrl` / `IMPORTMAP_CHECK_REGISTRY_URL`
 // seam) without touching the network. Any rebuild that honors a configurable
 // registry base URL can run these tests unchanged.
 
@@ -78,7 +78,7 @@ export const packumentsFromMaps = ({ latest = {}, specifiers = {} } = {}) => {
 
 // Start a mock registry serving the given `{ packageName: packument }` map.
 // Returns `{ url, close }`; `url` is suitable as `registryBaseUrl` /
-// `ECU_REGISTRY_URL`. Requests for unknown packages return 404.
+// `IMPORTMAP_CHECK_REGISTRY_URL`. Requests for unknown packages return 404.
 export const startMockRegistry = async (packuments = {}) => {
   const server = createServer((req, res) => {
     // npm encodes the "/" in scoped names as "%2f"; decode back to the real

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the human-readable reporting behavior for `esm-check-updates`.
+Define the human-readable reporting behavior for `importmap-check`.
 ## Requirements
 ### Requirement: Human-Readable Terminal Output
 The system SHALL present analysis results in human-readable terminal output.

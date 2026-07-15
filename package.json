@@ -1,5 +1,5 @@
 {
-  "name": "esm-check-updates",
+  "name": "importmap-check",
   "private": false,
   "version": "0.1.0",
   "description": "Check for updates to your ESM packages.",
@@ -7,11 +7,11 @@
   "author": "Ryan Roemer <ryan.roemer@nearform.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nearform/esm-check-updates.git"
+    "url": "git+https://github.com/nearform/importmap-check.git"
   },
-  "homepage": "https://github.com/nearform/esm-check-updates#readme",
+  "homepage": "https://github.com/nearform/importmap-check#readme",
   "bugs": {
-    "url": "https://github.com/nearform/esm-check-updates/issues"
+    "url": "https://github.com/nearform/importmap-check/issues"
   },
   "keywords": [
     "esm",
@@ -22,7 +22,7 @@
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "esm-check-updates": "bin/esm-check-updates.js"
+    "importmap-check": "bin/importmap-check.js"
   },
   "files": [
     "src",

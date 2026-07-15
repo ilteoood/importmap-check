@@ -2,6 +2,7 @@ schema: spec-driven
 
 context: |
   Tech stack: Node.js ESM CLI.
+  This project was renamed from `esm-check-updates` (old shorthand `ECU`) to `importmap-check` on 2026-07-14. Archived changes under `openspec/changes/archive/` predate the rename and intentionally retain the old name as point-in-time historical records; current specs and research use `importmap-check`.
   User-facing behavior is documented in README.md and should be kept in sync with implemented CLI changes.
   After making repo changes, run `npm run format` from a shell where the expected Node version is already active.
   Treat formatting as part of completion: auto-fix what can be fixed and stop if formatting or linting remains broken.

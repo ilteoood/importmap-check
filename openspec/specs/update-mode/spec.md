@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the update-rewrite behavior for `esm-check-updates` when invoked with `--update` / `-u`. Update mode transforms an in-scope target file in place by rewriting the destination URL of each updateable analyzed entry, using an atomic write, while preserving the entry's original specifier style and surfacing any integrity entries that must be reconsidered.
+Define the update-rewrite behavior for `importmap-check` when invoked with `--update` / `-u`. Update mode transforms an in-scope target file in place by rewriting the destination URL of each updateable analyzed entry, using an atomic write, while preserving the entry's original specifier style and surfacing any integrity entries that must be reconsidered.
 
 ## Requirements
 

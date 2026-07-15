@@ -32,7 +32,7 @@ const createError = (message, code = 1) => {
 
 const formatHelp = () => {
   return [
-    "Usage: esm-check-updates [options] <target-path>",
+    "Usage: importmap-check [options] <target-path>",
     "",
     "Check-only CLI for import map JSON and HTML files with inline import maps.",
     "The default invocation is non-destructive and reports available updates.",
@@ -167,7 +167,7 @@ const main = async (argv = process.argv.slice(2)) => {
   // the not-CLI-aware library verbs, which never sniff the terminal themselves.
   const colorEnabled =
     Boolean(process.stdout.isTTY) && process.env.NO_COLOR === undefined;
-  const registryBaseUrl = process.env.ECU_REGISTRY_URL || undefined;
+  const registryBaseUrl = process.env.IMPORTMAP_CHECK_REGISTRY_URL || undefined;
 
   if (parsed.mode === "dry-run") {
     const { output } = await preview(parsed.targetPath, {
