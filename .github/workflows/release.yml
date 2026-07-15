@@ -26,12 +26,27 @@ jobs:
         with:
           node-version-file: ".nvmrc"
           registry-url: "https://registry.npmjs.org"
-      - name: Upgrade npm for OIDC
-        run: npm i -g npm@">=11.5.1"
+      # TODO(publish): TESTING out
+      # # Floor 11.5.1 = npm's minimum for OIDC trusted publishing. Cap <12 is deliberate:
+      # # unbounded `>=11.5.1` pulls the just-shipped npm 12 major, which is the suspected
+      # # cause of `changeset publish` misreading 0.1.0 as unpublished (OIDC publish/read
+      # # # behavior is version-sensitive; similar shape: https://github.com/npm/cli/issues/9088).
+      # # # Do NOT widen to `latest`/unbounded until npm 12 + OIDC is verified here.
+      # - name: Upgrade npm for OIDC
+      #   run: npm i -g npm@"^11.5.1"
       - name: Install dependencies
         run: npm ci
+      # TODO(publish): REMOVE DEBUG STUFF
       - name: Debug registry read
-        run: npm info importmap-check versions --json || echo "npm info FAILED"
+        run: |
+          echo "=== plain field read ==="
+          npm info importmap-check versions --json || echo "FIELD READ FAILED"
+          echo "=== changesets-style full read ==="
+          npm info importmap-check --json > /tmp/info.json 2> /tmp/info.err; echo "exit=$?"
+          echo "--- stdout (first 400B) ---"; head -c 400 /tmp/info.json; echo
+          echo "--- stderr ---"; cat /tmp/info.err
+          echo "=== effective .npmrc ($NPM_CONFIG_USERCONFIG) ==="
+          cat "$NPM_CONFIG_USERCONFIG" 2>/dev/null | sed 's/_authToken=.*/_authToken=<redacted>/'
       - name: Create Release PR or Publish to npm
         id: changesets
         uses: changesets/action@v1
