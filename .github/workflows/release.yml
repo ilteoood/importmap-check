@@ -30,6 +30,8 @@ jobs:
         run: npm i -g npm@">=11.5.1"
       - name: Install dependencies
         run: npm ci
+      - name: Debug registry read
+        run: npm info importmap-check versions --json || echo "npm info FAILED"
       - name: Create Release PR or Publish to npm
         id: changesets
         uses: changesets/action@v1
