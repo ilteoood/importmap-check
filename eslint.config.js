@@ -20,8 +20,11 @@ export default [
       globals: {
         TextDecoder: "readonly",
         URL: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
         fetch: "readonly",
         process: "readonly",
+        setTimeout: "readonly",
       },
     },
     rules: {

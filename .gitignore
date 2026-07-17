@@ -28,3 +28,6 @@ coverage
 demo-public
 tmp-*
 .claude
+
+# Evaluation harness output
+evaluation/reports/
