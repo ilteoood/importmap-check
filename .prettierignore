@@ -1,3 +1,4 @@
 openspec/
 evaluation/reports/
+experiment/reports/
 test-baseline/fixtures/importmaps/malformed-import-map.json

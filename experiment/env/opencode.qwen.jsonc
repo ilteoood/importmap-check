@@ -1,0 +1,37 @@
+{
+  // Experiment environment: local Qwen3.6 via llama.cpp (OpenAI-compatible).
+  //
+  // Loaded via OPENCODE_CONFIG by `experiment/exp start qwen`. The launcher
+  // also points XDG_CONFIG_HOME/XDG_DATA_HOME at a dedicated per-env directory,
+  // so this is the ONLY config in effect and all session/cost data lands in an
+  // isolated opencode.db. cost is $0 for local inference.
+  //
+  // The llamacpp provider block is copied from the user's global
+  // ~/.config/opencode/opencode.json (which the launcher deliberately does NOT
+  // load). Requires llama.cpp serving on 127.0.0.1:8001.
+  //
+  // Keep this file identical to opencode.sonnet.jsonc EXCEPT for provider/model.
+  "$schema": "https://opencode.ai/config.json",
+  "model": "llamacpp/qwen3.6-35b-a3b-mtp",
+  "share": "disabled",
+  "autoupdate": false,
+  "provider": {
+    "llamacpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama.cpp (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8001/v1",
+      },
+      "models": {
+        "qwen3.6-35b-a3b-mtp": {
+          "name": "Qwen3.6-35B-A3B-MTP UD-Q4_K_XL",
+          "limit": {
+            "context": 262144,
+            "output": 32768,
+          },
+          "tools": true,
+        },
+      },
+    },
+  },
+}

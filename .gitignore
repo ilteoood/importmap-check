@@ -31,3 +31,6 @@ tmp-*
 
 # Evaluation harness output
 evaluation/reports/
+
+# Experiment harness output (per-run audit + generated metrics)
+experiment/reports/

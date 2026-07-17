@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+#
+# exp — launch opencode in an isolated experiment environment, or report on it.
+#
+# Each environment (sonnet | qwen) gets its own XDG_CONFIG_HOME + XDG_DATA_HOME
+# under $OPENCODE_EXP_ROOT (default ~/.opencode-exp), so config, auth, logs and
+# the session/cost database (opencode.db) are fully separate from your normal
+# opencode usage AND from each other. The only variable across environments is
+# the model — everything else (this repo, the tools, the workflow) is identical.
+#
+# Usage:
+#   experiment/exp start  <sonnet|qwen> [-- <opencode args...>]   # open the TUI
+#   experiment/exp auth   <sonnet|qwen>                           # one-time key/login
+#   experiment/exp run    <sonnet|qwen> -- <opencode run args...> # headless run
+#   experiment/exp models <sonnet|qwen>                           # list models in env
+#   experiment/exp stats  <sonnet|qwen> [-- <opencode stats args>]# built-in stats
+#   experiment/exp report [-- <metrics.mjs args...>]              # cross-env metrics
+#   experiment/exp env    <sonnet|qwen>                           # print env (for eval)
+#   experiment/exp paths  <sonnet|qwen>                           # print data/db paths
+#
+# First-time setup for the paid Anthropic env:
+#   experiment/exp auth sonnet         # paste your Anthropic API key
+# (or export ANTHROPIC_API_KEY before `start` — the launcher passes it through.)
+#
+set -euo pipefail
+
+EXP_ROOT="${OPENCODE_EXP_ROOT:-$HOME/.opencode-exp}"
+HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(git -C "$HARNESS_DIR" rev-parse --show-toplevel 2>/dev/null || pwd)"
+REPORTS_DIR="$HARNESS_DIR/reports"
+
+die() { echo "exp: $*" >&2; exit 2; }
+
+# Resolve the model + set the isolated XDG dirs / config for an environment.
+# Populates: ENV_DIR, MODEL, and exports the XDG_* + OPENCODE_* variables.
+setup_env() {
+  local env="${1:-}"
+  [ -n "$env" ] || die "missing environment (sonnet|qwen)"
+  case "$env" in
+    sonnet) MODEL="anthropic/claude-sonnet-5" ;;
+    qwen)   MODEL="llamacpp/qwen3.6-35b-a3b-mtp" ;;
+    *)      die "unknown environment '$env' (expected: sonnet | qwen)" ;;
+  esac
+
+  local cfg="$HARNESS_DIR/env/opencode.$env.jsonc"
+  [ -f "$cfg" ] || die "missing config: $cfg"
+
+  ENV_DIR="$EXP_ROOT/$env"
+  export XDG_DATA_HOME="$ENV_DIR/data"
+  export XDG_CONFIG_HOME="$ENV_DIR/config"
+  export XDG_CACHE_HOME="$ENV_DIR/cache"
+  export XDG_STATE_HOME="$ENV_DIR/state"
+  export OPENCODE_CONFIG="$cfg"
+  export OPENCODE_DISABLE_AUTOUPDATE=1
+  mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+}
+
+db_path() { echo "$EXP_ROOT/$1/data/opencode/opencode.db"; }
+
+# Append a launch record so we always know which model/branch/commit a run used.
+record_run() {
+  local env="$1" action="$2"
+  mkdir -p "$REPORTS_DIR"
+  local branch commit ts ocver
+  branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+  commit="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo '?')"
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ocver="$(opencode --version 2>/dev/null || echo '?')"
+  printf '{"time":"%s","action":"%s","env":"%s","model":"%s","branch":"%s","commit":"%s","opencode":"%s"}\n' \
+    "$ts" "$action" "$env" "$MODEL" "$branch" "$commit" "$ocver" \
+    >>"$REPORTS_DIR/runs.jsonl"
+}
+
+# Split "<env> [-- passthrough...]" — sets ENVNAME and the PASS array.
+parse_env_and_passthrough() {
+  ENVNAME="${1:-}"; shift || true
+  PASS=()
+  if [ "${1:-}" = "--" ]; then shift; fi
+  PASS=("$@")
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  start)
+    parse_env_and_passthrough "$@"
+    setup_env "$ENVNAME"
+    record_run "$ENVNAME" start
+    echo "exp: $ENVNAME → model=$MODEL  data=$XDG_DATA_HOME" >&2
+    cd "$REPO"
+    exec opencode --model "$MODEL" ${PASS[@]+"${PASS[@]}"}
+    ;;
+  run)
+    parse_env_and_passthrough "$@"
+    setup_env "$ENVNAME"
+    record_run "$ENVNAME" run
+    cd "$REPO"
+    exec opencode run --model "$MODEL" ${PASS[@]+"${PASS[@]}"}
+    ;;
+  auth)
+    setup_env "${1:-}"
+    echo "exp: authenticating in isolated env $1 (data=$XDG_DATA_HOME)" >&2
+    exec opencode auth login
+    ;;
+  models)
+    setup_env "${1:-}"
+    exec opencode models
+    ;;
+  stats)
+    parse_env_and_passthrough "$@"
+    setup_env "$ENVNAME"
+    exec opencode stats ${PASS[@]+"${PASS[@]}"}
+    ;;
+  report)
+    PASS=()
+    if [ "${1:-}" = "--" ]; then shift; fi
+    PASS=("$@")
+    exec node "$HARNESS_DIR/metrics.mjs" --exp-root "$EXP_ROOT" --repo "$REPO" \
+      --out "$REPORTS_DIR" ${PASS[@]+"${PASS[@]}"}
+    ;;
+  env)
+    setup_env "${1:-}"
+    echo "export XDG_DATA_HOME=$XDG_DATA_HOME"
+    echo "export XDG_CONFIG_HOME=$XDG_CONFIG_HOME"
+    echo "export XDG_CACHE_HOME=$XDG_CACHE_HOME"
+    echo "export XDG_STATE_HOME=$XDG_STATE_HOME"
+    echo "export OPENCODE_CONFIG=$OPENCODE_CONFIG"
+    echo "export OPENCODE_DISABLE_AUTOUPDATE=1"
+    echo "# model: $MODEL"
+    ;;
+  paths)
+    setup_env "${1:-}"
+    echo "env_dir:  $ENV_DIR"
+    echo "config:   $OPENCODE_CONFIG"
+    echo "database: $(db_path "$1")"
+    echo "model:    $MODEL"
+    ;;
+  ""|-h|--help|help)
+    sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    die "unknown command '$cmd' (try: start | auth | run | models | stats | report | env | paths)"
+    ;;
+esac

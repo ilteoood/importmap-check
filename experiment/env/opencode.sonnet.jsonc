@@ -1,0 +1,15 @@
+{
+  // Experiment environment: Anthropic Sonnet 5 via the paid, metered API.
+  //
+  // Loaded via OPENCODE_CONFIG by `experiment/exp start sonnet`. The launcher
+  // also points XDG_CONFIG_HOME/XDG_DATA_HOME at a dedicated per-env directory,
+  // so this is the ONLY config in effect (no global ~/.config/opencode leak)
+  // and all session/cost data lands in an isolated opencode.db.
+  //
+  // Keep this file identical to opencode.qwen.jsonc EXCEPT for provider/model,
+  // so the model is the only variable in the experiment.
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5",
+  "share": "disabled",
+  "autoupdate": false,
+}
