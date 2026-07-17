@@ -29,7 +29,7 @@ The system SHALL write update-mode output to the target file atomically so that 
 
 ### Requirement: Specifier-Preserving Entry Rewrite
 
-The system SHALL rewrite each updateable analyzed entry in the target file by substituting the new destination URL string in place while preserving the entry's original specifier style, except for the dist-tag class which is not rewritten in this change. The new specifier SHALL be computed by applying the npm semver locking rules for the prefix (`^` locks the leftmost non-zero element, `~` locks everything except the rightmost-specified position) and using the analyzer's resolved `latestVersion` as the new floor that preserves the same locked-position semantics.
+The system SHALL rewrite each updateable analyzed entry in the target file by substituting the new destination URL string in place while preserving the entry's original specifier style, except for the dist-tag class, which is not rewritten. The new specifier SHALL be computed by applying the npm semver locking rules for the prefix (`^` locks the leftmost non-zero element, `~` locks everything except the rightmost-specified position) and using the analyzer's resolved `latestVersion` as the new floor that preserves the same locked-position semantics.
 
 #### Scenario: Pinned entry is bumped to latest
 - **WHEN** an entry uses a concrete pinned specifier such as `react@19.2.3` and the analyzer reports an available update to `19.3.0`
@@ -206,7 +206,7 @@ The system SHALL only rewrite destination URL strings captured during analysis a
 
 ### Requirement: Integrity Strip on Rewrite
 
-When `--update` rewrites a destination URL, the system SHALL remove any import map `integrity` entry keyed to either the original or rewritten URL, and SHALL emit a hard warning naming each stripped URL. The system SHALL NOT compute or write replacement integrity hashes in this change. This applies whether the URL change originates from an outer package rewrite, a `?deps=` dependency pin rewrite, or both.
+When `--update` rewrites a destination URL, the system SHALL remove any import map `integrity` entry keyed to either the original or rewritten URL, and SHALL emit a hard warning naming each stripped URL. The system SHALL NOT compute or write replacement integrity hashes. This applies whether the URL change originates from an outer package rewrite, a `?deps=` dependency pin rewrite, or both.
 
 #### Scenario: Integrity entry exists for a rewritten URL
 - **WHEN** the import map contains an `integrity` entry keyed to a destination URL that gets rewritten by `--update`
@@ -229,7 +229,7 @@ When `--update` rewrites a destination URL, the system SHALL remove any import m
 - **THEN** the system does not emit a warning
 - **AND** the post-rewrite summary does not include the stripped-integrity subsection
 
-#### Scenario: Integrity regeneration is not performed in this change
+#### Scenario: Integrity regeneration is not performed
 - **WHEN** the system strips an `integrity` entry for a rewritten URL
 - **THEN** the system does not attempt to compute or write a replacement integrity hash
 - **AND** the user is responsible for re-pinning SRI externally after validating the new URL

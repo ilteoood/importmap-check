@@ -3,7 +3,9 @@
 ## Purpose
 
 Define how `importmap-check` identifies updateable packages from supported CDN-backed import map entries.
+
 ## Requirements
+
 ### Requirement: Supported CDN Families
 The system SHALL support `esm.sh` and `jsdelivr` CDN URL families.
 
@@ -134,13 +136,6 @@ The system SHALL determine whether a newer package version is available for supp
 - **THEN** the system reports the successful update findings it was able to determine
 - **AND** the system reports the lookup failures separately
 
-### Requirement: CDN Reference Comments
-The implementation SHALL include code comments with authoritative document links where available for supported CDN URL shapes, query semantics, and package resolution nuances.
-
-#### Scenario: CDN-specific parsing behavior is implemented from documented service rules
-- **WHEN** the implementation adds or maintains logic for supported CDN-specific URL parsing or query handling based on published service documentation
-- **THEN** the relevant code includes a concise comment with a link to that authoritative document when such a document exists
-
 ### Requirement: Semver Range and Dist-Tag Resolution
 The system SHALL resolve semver ranges, major-only selectors, minor-only selectors, and npm dist-tags (including arbitrary dist-tag names published to the npm registry) to concrete versions via the npm registry when they appear in CDN URLs or `?deps=` query strings.
 
@@ -188,27 +183,13 @@ The system SHALL resolve semver ranges, major-only selectors, minor-only selecto
 - **WHEN** the system cannot resolve a semver range or dist-tag via the npm registry
 - **THEN** the system reports the entry as non-versioned or unparseable (same as absent/pin-only paths)
 
-### Requirement: Three-Column Reporting Format
-The system SHALL report resolved package entries using three columns: Package, Resolved, and Latest.
+### Requirement: Resolved Entry Reporting Data
+For each resolved package entry the system SHALL make available the package name, the original specifier (when it was a range, selector, or dist-tag), the concrete resolved version, and the npm registry `latest` version. The terminal presentation of these values (column layout and headers) is defined by the `reporting` capability's `Package-Centric Reporting` requirement.
 
-#### Scenario: three-column table is rendered for updates
-- **WHEN** the system has package entries with available updates (including resolved ranges and dist-tags)
-- **THEN** the system renders a three-column table with headers "Package", "Resolved", and "Latest"
-- **AND** the Package column shows the package name, optionally with the original specifier in parentheses when it was a range, selector, or dist-tag
-- **AND** the Resolved column shows the concrete resolved version
-- **AND** the Latest column shows the npm registry `latest` dist-tag version
-
-#### Scenario: three-column table is rendered for current packages
-- **WHEN** the system has package entries that are up to date (including resolved ranges and dist-tags)
-- **THEN** the system renders a three-column table with headers "Package", "Resolved", and "Latest"
-- **AND** the Package column shows the package name, optionally with the original specifier in parentheses when it was a range, selector, or dist-tag
-- **AND** the Resolved column shows the concrete resolved version
-- **AND** the Latest column shows the npm registry `latest` dist-tag version
-
-#### Scenario: original specifier is shown alongside resolved version
-- **WHEN** an entry was originally specified with a range, selector, or dist-tag
-- **THEN** the system preserves the original specifier in the report for user clarity
-- **AND** the original specifier is shown in the Package column alongside the package name
+#### Scenario: resolved entry carries specifier, resolved, and latest values
+- **WHEN** the system resolves a package entry from a pin, range, selector, or dist-tag
+- **THEN** the entry carries the package name, the original specifier when it was a range, selector, or dist-tag, the concrete resolved version, and the npm registry `latest` version
+- **AND** how these values are laid out for the user is governed by the `reporting` capability
 
 ## Non-Goals
 

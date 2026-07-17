@@ -118,13 +118,6 @@ The system SHALL recognize top-level import map `integrity` metadata across chec
 - **THEN** the system strips and warns per the `Integrity Strip on Rewrite` requirement in the `update-mode` capability
 - **AND** the importmap-input capability itself does not define the strip semantics
 
-### Requirement: Import Map Reference Comments
-The implementation SHALL include code comments with authoritative document links where available for import map behaviors derived from external specifications or browser-facing format rules.
-
-#### Scenario: Import map behavior is implemented from documented external rules
-- **WHEN** the implementation adds or maintains logic for import map parsing, validation, or supported structure handling based on an external standard or authoritative reference
-- **THEN** the relevant code includes a concise comment with a link to that authoritative document when such a document exists
-
 ## Non-Goals
 
 - External HTML import map references

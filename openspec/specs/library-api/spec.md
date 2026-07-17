@@ -7,7 +7,7 @@ exposes for programmatic use and that the CLI is built on. This is the
 observable contract for the package's main module: the verb entry points, their
 options, and the shape of the structured result they return. It deliberately
 does not prescribe internal decomposition — only what a caller (and the
-`test/api` baseline) can observe.
+`test-baseline/api` suite) can observe.
 
 ## Requirements
 
@@ -135,7 +135,7 @@ The `data.plan` returned by `preview` and `update` SHALL provide `noChanges`,
 ## Non-Goals
 
 - Prescribing the internal module decomposition or helper functions used to
-  produce `output` and `data` (that is implementation, recorded separately in
-  `docs/CONTRACT.md` for reference only)
+  produce `output` and `data` (that is implementation detail, out of scope for
+  this spec)
 - Freezing exact spacing, column widths, or prose in `output` (see the
   `reporting` capability's non-goals)

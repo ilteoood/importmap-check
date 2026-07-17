@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Define the user-facing command contract for `importmap-check`.
+Define the user-facing command contract for `importmap-check`. The default
+invocation maps to the `check` verb, `--dry-run` to `preview`, and `--update` /
+`-u` to `update` as defined by the `library-api` capability.
 
 ## Requirements
 
@@ -183,12 +185,12 @@ The system SHALL use standard output streams consistently for normal results and
 - **THEN** the system writes the error to `stderr`
 
 ### Requirement: CLI And Functional Code Separation
-The system SHALL keep command-line orchestration in the published bin entrypoint and reserve `src/` for ESM/import map functional code.
+The system SHALL keep command-line orchestration in the CLI layer and keep import-map analysis and reporting in the not-CLI-aware library layer defined by the `library-api` capability.
 
-#### Scenario: bootstrap CLI behavior is implemented
+#### Scenario: command-line orchestration is added or changed
 - **WHEN** argument parsing, help/version handling, exit code management, or target-path preflight validation is added or changed
-- **THEN** that behavior is implemented in `bin/importmap-check.js`
-- **AND** `src/` is not used as the home for command-line orchestration
+- **THEN** that behavior lives in the CLI layer
+- **AND** the library layer does not read process arguments, call `process.exit`, or infer presentation from the terminal
 
 ### Requirement: Exit Code Semantics
 The system SHALL treat update findings as a successful execution result.
