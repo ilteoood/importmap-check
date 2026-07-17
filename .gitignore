@@ -28,6 +28,7 @@ coverage
 demo-public
 tmp-*
 .claude
+.opencode
 
 # Evaluation harness output
 evaluation/reports/
