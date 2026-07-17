@@ -22,7 +22,7 @@
 // Session→project is filtered by `session.directory == repo` unless --all.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -35,6 +35,7 @@ const parseArgs = (argv) => {
     envs: null, // null → DEFAULT_ENVS
     dbOverrides: {}, // env → path
     all: false,
+    runs: null, // path to runs.jsonl (env→worktree-dir attribution)
     out: null,
     json: false,
   };
@@ -56,6 +57,9 @@ const parseArgs = (argv) => {
         break;
       case "--all":
         args.all = true;
+        break;
+      case "--runs":
+        args.runs = path.resolve(next());
         break;
       case "--out":
         args.out = path.resolve(next());
@@ -79,6 +83,56 @@ const parseArgs = (argv) => {
     }
   }
   return args;
+};
+
+// Parse runs.jsonl into per-env attribution: which worktree directories a
+// session must have run in to count for that env, plus the dir→branch map and
+// the most-recent branch per env. Returns Map(env → {dirs:Set, branchByDir:Map,
+// primaryBranch}). Empty map if the file is missing/unreadable.
+const loadRuns = (runsPath) => {
+  const byEnv = new Map();
+  if (!runsPath || !existsSync(runsPath)) {
+    return byEnv;
+  }
+  let text;
+  try {
+    text = readFileSync(runsPath, "utf8");
+  } catch {
+    return byEnv;
+  }
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    let rec;
+    try {
+      rec = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const { env, directory, branch, time } = rec;
+    if (!env || !directory) {
+      continue;
+    }
+    const dir = path.resolve(directory);
+    const entry = byEnv.get(env) ?? {
+      dirs: new Set(),
+      branchByDir: new Map(),
+      primaryBranch: branch ?? null,
+      latest: time ?? "",
+    };
+    entry.dirs.add(dir);
+    if (branch) {
+      entry.branchByDir.set(dir, branch);
+    }
+    if ((time ?? "") >= (entry.latest ?? "")) {
+      entry.latest = time ?? "";
+      entry.primaryBranch = branch ?? entry.primaryBranch;
+    }
+    byEnv.set(env, entry);
+  }
+  return byEnv;
 };
 
 // Run one SQL query, return rows as objects (empty array on any failure).
@@ -107,8 +161,26 @@ const median = (values) => {
 };
 
 // Collect per-session metrics for one environment's database.
-const collectEnv = (name, db, { repo, all }) => {
-  const env = { name, db, present: existsSync(db), sessions: [], rollup: null };
+//
+// Attribution, in priority order:
+//   1. `dirs` (from runs.jsonl) — keep sessions whose directory is one of this
+//      env's recorded rebuild-worktree dirs. This is exact and worktree-aware.
+//   2. else `all` — keep every session in the DB.
+//   3. else `repo` — legacy single-directory match.
+const collectEnv = (
+  name,
+  db,
+  { repo, all, dirs = null, branchByDir = null },
+) => {
+  const env = {
+    name,
+    db,
+    present: existsSync(db),
+    sessions: [],
+    rollup: null,
+    branches: [],
+    primaryBranch: null,
+  };
   if (!env.present) {
     return env;
   }
@@ -176,9 +248,19 @@ const collectEnv = (name, db, { repo, all }) => {
   }
 
   const repoResolved = path.resolve(repo);
+  const branchSet = new Set();
   for (const s of sessions) {
-    if (!all && path.resolve(s.directory ?? "") !== repoResolved) {
+    const dir = path.resolve(s.directory ?? "");
+    if (dirs) {
+      if (!dirs.has(dir)) {
+        continue;
+      }
+    } else if (!all && dir !== repoResolved) {
       continue;
+    }
+    const branch = branchByDir?.get(dir) ?? null;
+    if (branch) {
+      branchSet.add(branch);
     }
     const msg = msgBySession.get(s.id) ?? { user: 0, assistant: 0, genMs: 0 };
     const tools = toolsBySession.get(s.id) ?? {
@@ -195,6 +277,7 @@ const collectEnv = (name, db, { repo, all }) => {
     env.sessions.push({
       id: s.id,
       title: s.title,
+      branch,
       model: `${s.provider ?? "?"}/${s.model_id ?? "?"}`,
       agent: s.agent,
       cost: num(s.cost),
@@ -220,6 +303,7 @@ const collectEnv = (name, db, { repo, all }) => {
     });
   }
 
+  env.branches = [...branchSet].sort();
   env.rollup = rollupEnv(env.sessions);
   return env;
 };
@@ -422,19 +506,30 @@ const renderMarkdown = (report) => {
 const main = () => {
   const args = parseArgs(process.argv.slice(2));
   const envNames = args.envs ?? DEFAULT_ENVS;
+  const runs = loadRuns(args.runs); // Map(env → {dirs, branchByDir, primaryBranch})
+
+  const collect = (name, db) => {
+    const r = runs.get(name);
+    const env = collectEnv(name, db, {
+      repo: args.repo,
+      all: args.all,
+      dirs: r?.dirs ?? null,
+      branchByDir: r?.branchByDir ?? null,
+    });
+    env.primaryBranch = r?.primaryBranch ?? env.branches[0] ?? null;
+    return env;
+  };
 
   const environments = envNames.map((name) => {
     const db =
       args.dbOverrides[name] ??
       path.join(args.expRoot, name, "data", "opencode", "opencode.db");
-    return collectEnv(name, db, { repo: args.repo, all: args.all });
+    return collect(name, db);
   });
   // Bare --db path with no matching env name → add as its own environment.
   for (const [name, db] of Object.entries(args.dbOverrides)) {
     if (!envNames.includes(name)) {
-      environments.push(
-        collectEnv(name, db, { repo: args.repo, all: args.all }),
-      );
+      environments.push(collect(name, db));
     }
   }
 

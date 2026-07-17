@@ -55,35 +55,36 @@ main                    reference implementation (grader compares against it)
                           Run the grader from here.
 ```
 
-Rebuild branches fork from **`openspec-starter`**. Because `test-baseline/` and
-`evaluation/` are tracked only on `openspec-base`, switching to a starter-forked
-branch **removes them from the working tree** — so a rebuild literally cannot
-see the graded suite or the grader. (`experiment/` is local-only via
-`.git/info/exclude` and stays on disk; it's the process-cost harness, not the
-answer key — see [`../experiment/README.md`](../experiment/README.md).)
+Rebuild branches fork from **`openspec-starter`**. Because `test-baseline/`,
+`evaluation/`, and `experiment/` are tracked only on `openspec-base`, a
+starter-forked worktree has none of them — so a rebuild literally cannot see the
+graded suite, the grader, or the process-cost harness. (`experiment/` is the tool
+you use to _create_ these branches; see
+[`../experiment/README.md`](../experiment/README.md).)
 
 ## The rebuild → evaluate workflow
 
 ### 1. Create a rebuild branch from the clean starter
 
-Use a **fresh worktree** off `openspec-starter` — this guarantees a pristine
-tree with no leftovers:
+The experiment harness does this for you — `experiment/exp new <env>` creates a
+worktree off `openspec-starter` on `exp/<env>` and launches opencode there (see
+[`../experiment/README.md`](../experiment/README.md)):
 
 ```sh
-git worktree add ../ic-<model> openspec-starter   # e.g. ../ic-sonnet-5
-cd ../ic-<model>
-git switch -c exp/<model>                          # e.g. exp/sonnet-5, exp/qwen3.6
+experiment/exp new sonnet     # worktree ../ic-sonnet on exp/sonnet, off openspec-starter
 ```
 
-A worktree has no `test-baseline/`, `evaluation/`, or `experiment/` at all, so
-the rebuild cannot see the graded suite or the grader.
+Or by hand, without the experiment harness:
 
-> Switching **in place** (`git switch -c exp/<model> openspec-starter` in your
-> main checkout) also removes the _tracked_ `test-baseline/`/`evaluation/`, but
-> **gitignored/untracked leftovers survive** — notably `evaluation/reports/`
-> (whose `report.md` lists canonical test names) and `experiment/`. Prefer the
-> worktree, or `rm -rf evaluation experiment` in the checkout before starting a
-> rebuild.
+```sh
+git worktree add ../ic-sonnet openspec-starter
+cd ../ic-sonnet && git switch -c exp/sonnet
+```
+
+Either way the worktree has no `test-baseline/`, `evaluation/`, or `experiment/`
+— a clean, spec-only starting point. (Switching **in place** in your main
+checkout instead leaves gitignored leftovers like `evaluation/reports/` — whose
+`report.md` lists canonical test names — on disk; use a worktree.)
 
 ### 2. Run the rebuild on that branch
 
@@ -116,11 +117,11 @@ node evaluation/run-branch.mjs exp/<model> --keep-scratch
 # --base-ref openspec-base pins the canonical suite to the committed harness branch.
 node evaluation/report.mjs \
   --reference main --base-ref openspec-base \
-  --branches "sonnet=exp/sonnet-5,qwen=exp/qwen3.6"
+  --branches "sonnet=exp/sonnet,qwen=exp/qwen"
 
 # Or via the package script (note the `--` before flags):
 npm run eval -- --reference main --base-ref openspec-base \
-  --branches "sonnet=exp/sonnet-5,qwen=exp/qwen3.6"
+  --branches "sonnet=exp/sonnet,qwen=exp/qwen"
 ```
 
 Reports are written to `evaluation/reports/` (gitignored):
@@ -142,6 +143,20 @@ Open `evaluation/reports/report.md`. Check, in order:
    (✓ pass · ✗ fail · s skip · t todo · – absent).
 4. **Regressions vs reference** — tests green on `main` but not on a candidate.
    This is the headline signal for "what did this rebuild get wrong."
+
+### 6. Combined cost vs. quality (optional)
+
+After grading (above) and a process-cost report (`experiment/exp report`), join
+them into one table per model:
+
+```sh
+npm run eval:combined            # or: node evaluation/combined.mjs
+```
+
+→ `evaluation/reports/combined.md`: cost + tokens + time **and** tests-passed /
+API-CLI tiers / regressions per model. Join key: each experiment env's primary
+branch (from `experiment/reports/runs.jsonl`) = the evaluation branch ref. See
+[`../experiment/README.md`](../experiment/README.md) for the cost side.
 
 ---
 

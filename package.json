@@ -38,6 +38,7 @@
     "test:only": "node --test --test-only 'test-baseline/**/*.test.js'",
     "test:baseline": "node --test 'test-baseline/api/*.test.js' 'test-baseline/cli/*.test.js'",
     "eval": "node evaluation/report.mjs",
+    "eval:combined": "node evaluation/combined.mjs",
     "dep:check": "npx npm-check-updates"
   },
   "devDependencies": {

@@ -2,21 +2,31 @@
 #
 # exp — launch opencode in an isolated experiment environment, or report on it.
 #
-# Each environment (sonnet | qwen) gets its own XDG_CONFIG_HOME + XDG_DATA_HOME
-# under $OPENCODE_EXP_ROOT (default ~/.opencode-exp), so config, auth, logs and
-# the session/cost database (opencode.db) are fully separate from your normal
-# opencode usage AND from each other. The only variable across environments is
-# the model — everything else (this repo, the tools, the workflow) is identical.
+# The harness lives on openspec-base (next to evaluation/). Rebuilds run in
+# their OWN git worktree forked from openspec-starter, so the model never sees
+# the graded suite (test-baseline/), the grader (evaluation/), or this harness.
+# Each environment (sonnet | qwen) also gets its own XDG_CONFIG_HOME +
+# XDG_DATA_HOME under $OPENCODE_EXP_ROOT (default ~/.opencode-exp), so config,
+# auth, logs and the session/cost database (opencode.db) are fully separate from
+# your normal opencode usage AND from each other. The only variable across
+# environments is the model.
 #
 # Usage:
-#   experiment/exp start  <sonnet|qwen> [-- <opencode args...>]   # open the TUI
-#   experiment/exp auth   <sonnet|qwen>                           # one-time key/login
-#   experiment/exp run    <sonnet|qwen> -- <opencode run args...> # headless run
-#   experiment/exp models <sonnet|qwen>                           # list models in env
-#   experiment/exp stats  <sonnet|qwen> [-- <opencode stats args>]# built-in stats
-#   experiment/exp report [-- <metrics.mjs args...>]              # cross-env metrics
-#   experiment/exp env    <sonnet|qwen>                           # print env (for eval)
-#   experiment/exp paths  <sonnet|qwen>                           # print data/db paths
+#   experiment/exp new    <sonnet|qwen> [branch] [-- <opencode args...>]  # create worktree + open TUI
+#   experiment/exp start  <sonnet|qwen> [branch] [-- <opencode args...>]  # attach to existing worktree + TUI
+#   experiment/exp run    <sonnet|qwen> [branch] -- <opencode run args>   # headless run in the worktree
+#   experiment/exp ls                                                     # list rebuild worktrees
+#   experiment/exp rm     <sonnet|qwen|branch>                            # remove a rebuild worktree
+#   experiment/exp auth   <sonnet|qwen>                                   # one-time key/login
+#   experiment/exp models <sonnet|qwen>                                   # list models in env
+#   experiment/exp stats  <sonnet|qwen> [-- <opencode stats args>]        # built-in stats
+#   experiment/exp report [-- <metrics.mjs args...>]                      # cross-env metrics
+#   experiment/exp env    <sonnet|qwen>                                   # print env (for eval)
+#   experiment/exp paths  <sonnet|qwen>                                   # print data/db paths
+#
+# Branch defaults to exp/<env> (e.g. exp/sonnet). Worktrees are created under
+# $EXP_WORKTREE_ROOT (default: the parent of this repo) as ic-<slug>. The base
+# branch for new worktrees is $EXP_STARTER_REF (default: openspec-starter).
 #
 # First-time setup for the paid Anthropic env:
 #   experiment/exp auth sonnet         # paste your Anthropic API key
@@ -28,6 +38,8 @@ EXP_ROOT="${OPENCODE_EXP_ROOT:-$HOME/.opencode-exp}"
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(git -C "$HARNESS_DIR" rev-parse --show-toplevel 2>/dev/null || pwd)"
 REPORTS_DIR="$HARNESS_DIR/reports"
+STARTER_REF="${EXP_STARTER_REF:-openspec-starter}"
+WORKTREE_ROOT="${EXP_WORKTREE_ROOT:-$(dirname "$REPO")}"
 
 die() { echo "exp: $*" >&2; exit 2; }
 
@@ -57,44 +69,97 @@ setup_env() {
 
 db_path() { echo "$EXP_ROOT/$1/data/opencode/opencode.db"; }
 
-# Append a launch record so we always know which model/branch/commit a run used.
+# Filesystem path for a rebuild worktree, derived from its branch name.
+#   exp/sonnet     -> $WORKTREE_ROOT/ic-sonnet
+#   exp/sonnet-5   -> $WORKTREE_ROOT/ic-sonnet-5
+worktree_path() {
+  local branch="$1" slug
+  slug="${branch#exp/}"     # drop a leading exp/
+  slug="${slug//\//-}"      # any remaining slashes -> dashes
+  echo "$WORKTREE_ROOT/ic-$slug"
+}
+
+# Append a launch record so we always know which model/branch/commit/dir a run
+# used. Attribution in metrics.mjs joins sessions back to a branch via this.
 record_run() {
-  local env="$1" action="$2"
+  local env="$1" branch="$2" dir="$3" action="$4"
   mkdir -p "$REPORTS_DIR"
-  local branch commit ts ocver
-  branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
-  commit="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo '?')"
+  local commit ts ocver
+  commit="$(git -C "$dir" rev-parse HEAD 2>/dev/null || echo '?')"
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   ocver="$(opencode --version 2>/dev/null || echo '?')"
-  printf '{"time":"%s","action":"%s","env":"%s","model":"%s","branch":"%s","commit":"%s","opencode":"%s"}\n' \
-    "$ts" "$action" "$env" "$MODEL" "$branch" "$commit" "$ocver" \
+  printf '{"time":"%s","action":"%s","env":"%s","model":"%s","branch":"%s","commit":"%s","directory":"%s","opencode":"%s"}\n' \
+    "$ts" "$action" "$env" "$MODEL" "$branch" "$commit" "$dir" "$ocver" \
     >>"$REPORTS_DIR/runs.jsonl"
 }
 
-# Split "<env> [-- passthrough...]" — sets ENVNAME and the PASS array.
-parse_env_and_passthrough() {
+# Split "<env> [branch] [-- passthrough...]" — sets ENVNAME, BRANCH, PASS.
+parse_target() {
   ENVNAME="${1:-}"; shift || true
-  PASS=()
+  BRANCH=""
+  if [ -n "${1:-}" ] && [ "${1:-}" != "--" ]; then BRANCH="$1"; shift || true; fi
+  [ -n "$BRANCH" ] || BRANCH="exp/$ENVNAME"
   if [ "${1:-}" = "--" ]; then shift; fi
   PASS=("$@")
 }
 
+# Launch opencode for the env in the worktree that backs BRANCH (must exist).
+launch() {
+  local mode="$1"   # start | run
+  setup_env "$ENVNAME"
+  local target; target="$(worktree_path "$BRANCH")"
+  [ -d "$target" ] || die "no worktree for '$BRANCH' at $target — create it with: exp new $ENVNAME $BRANCH"
+  record_run "$ENVNAME" "$BRANCH" "$target" "$mode"
+  echo "exp: $ENVNAME → model=$MODEL  branch=$BRANCH  dir=$target" >&2
+  cd "$target"
+  if [ "$mode" = run ]; then
+    exec opencode run --model "$MODEL" ${PASS[@]+"${PASS[@]}"}
+  else
+    exec opencode --model "$MODEL" ${PASS[@]+"${PASS[@]}"}
+  fi
+}
+
 cmd="${1:-}"; shift || true
 case "$cmd" in
+  new)
+    parse_target "$@"
+    [ -n "$ENVNAME" ] || die "usage: exp new <sonnet|qwen> [branch] [-- opencode args]"
+    target="$(worktree_path "$BRANCH")"
+    [ -d "$target" ] && die "worktree already exists: $target (use: exp start $ENVNAME $BRANCH)"
+    if git -C "$REPO" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+      echo "exp: attaching worktree $target to existing branch $BRANCH" >&2
+      git -C "$REPO" worktree add "$target" "$BRANCH" >&2
+    else
+      echo "exp: creating worktree $target on new branch $BRANCH (off $STARTER_REF)" >&2
+      git -C "$REPO" worktree add "$target" -b "$BRANCH" "$STARTER_REF" >&2
+    fi
+    launch start
+    ;;
   start)
-    parse_env_and_passthrough "$@"
-    setup_env "$ENVNAME"
-    record_run "$ENVNAME" start
-    echo "exp: $ENVNAME → model=$MODEL  data=$XDG_DATA_HOME" >&2
-    cd "$REPO"
-    exec opencode --model "$MODEL" ${PASS[@]+"${PASS[@]}"}
+    parse_target "$@"
+    [ -n "$ENVNAME" ] || die "usage: exp start <sonnet|qwen> [branch] [-- opencode args]"
+    launch start
     ;;
   run)
-    parse_env_and_passthrough "$@"
-    setup_env "$ENVNAME"
-    record_run "$ENVNAME" run
-    cd "$REPO"
-    exec opencode run --model "$MODEL" ${PASS[@]+"${PASS[@]}"}
+    parse_target "$@"
+    [ -n "$ENVNAME" ] || die "usage: exp run <sonnet|qwen> [branch] -- <opencode run args>"
+    launch run
+    ;;
+  ls)
+    echo "Rebuild worktrees (base: $STARTER_REF, root: $WORKTREE_ROOT):" >&2
+    git -C "$REPO" worktree list
+    ;;
+  rm)
+    arg="${1:-}"; [ -n "$arg" ] || die "usage: exp rm <sonnet|qwen|branch>"
+    # Accept an env name, a branch, or a path.
+    case "$arg" in
+      sonnet|qwen) target="$(worktree_path "exp/$arg")" ;;
+      /*)          target="$arg" ;;
+      *)           target="$(worktree_path "$arg")" ;;
+    esac
+    [ -d "$target" ] || die "no worktree at $target"
+    git -C "$REPO" worktree remove "$target"
+    echo "exp: removed worktree $target (branch is kept)" >&2
     ;;
   auth)
     setup_env "${1:-}"
@@ -106,16 +171,15 @@ case "$cmd" in
     exec opencode models
     ;;
   stats)
-    parse_env_and_passthrough "$@"
+    ENVNAME="${1:-}"; shift || true
+    if [ "${1:-}" = "--" ]; then shift; fi
     setup_env "$ENVNAME"
-    exec opencode stats ${PASS[@]+"${PASS[@]}"}
+    exec opencode stats "$@"
     ;;
   report)
-    PASS=()
     if [ "${1:-}" = "--" ]; then shift; fi
-    PASS=("$@")
-    exec node "$HARNESS_DIR/metrics.mjs" --exp-root "$EXP_ROOT" --repo "$REPO" \
-      --out "$REPORTS_DIR" ${PASS[@]+"${PASS[@]}"}
+    exec node "$HARNESS_DIR/metrics.mjs" --exp-root "$EXP_ROOT" \
+      --runs "$REPORTS_DIR/runs.jsonl" --repo "$REPO" --out "$REPORTS_DIR" "$@"
     ;;
   env)
     setup_env "${1:-}"
@@ -132,12 +196,13 @@ case "$cmd" in
     echo "env_dir:  $ENV_DIR"
     echo "config:   $OPENCODE_CONFIG"
     echo "database: $(db_path "$1")"
+    echo "worktree: $(worktree_path "exp/$1") (branch exp/$1)"
     echo "model:    $MODEL"
     ;;
   ""|-h|--help|help)
-    sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
   *)
-    die "unknown command '$cmd' (try: start | auth | run | models | stats | report | env | paths)"
+    die "unknown command '$cmd' (try: new | start | run | ls | rm | auth | models | stats | report | env | paths)"
     ;;
 esac

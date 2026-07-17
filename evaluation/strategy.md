@@ -140,6 +140,10 @@ tiers separately so cosmetic divergence reads differently from real breakage.
   matrix, enforce the reference gate, write the reports.
 - `reporters/ndjson-reporter.mjs` — custom `node:test` reporter emitting one
   NDJSON record per test (name, status, duration, failure).
+- `combined.mjs` — join this harness's quality report with the sibling
+  `experiment/` process-cost report (`metrics.json`) into one cost-vs-quality
+  table per model (`combined.{json,md}`). Join key: experiment env's primary
+  branch = evaluation branch ref.
 - `specs-review.md` — the OpenSpec spec review and cleanup record.
 
 ## Edge cases handled
